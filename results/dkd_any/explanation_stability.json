@@ -1,0 +1,12 @@
+{
+  "bootstrap_fits": 25,
+  "mean_spearman_rank_corr": 0.9109380230369222,
+  "mean_top5_jaccard": 0.6776190476190476,
+  "top5_features_xgboost_shap": [
+    "Age",
+    "Systolic BP",
+    "HbA1c",
+    "Insulin use",
+    "Diabetes duration"
+  ]
+}
