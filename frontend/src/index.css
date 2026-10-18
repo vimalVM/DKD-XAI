@@ -90,7 +90,7 @@ body {
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
   max-width: 1560px;
   margin: 0 auto;
 }
@@ -100,6 +100,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
   padding: 0.85rem 1.75rem;
   background: #FFFFFF;
   border-bottom: 1px solid var(--border-subtle);
@@ -172,7 +174,8 @@ body {
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 /* Preset Dropdown in Header */
@@ -376,11 +379,13 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
 .vitals-form-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 1.25rem;
   display: flex;
@@ -465,6 +470,7 @@ body {
   display: flex;
   gap: 0.85rem;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .btn-predict-now {
@@ -1061,9 +1067,306 @@ body {
   40% { transform: scale(1.1); opacity: 1; }
 }
 
-@media (max-width: 1024px) {
+/* ========================================================
+   COMPREHENSIVE RESPONSIVE DESIGN FOR ALL SCREEN SIZES
+   ======================================================== */
+
+/* Large Desktop Screens with Full Height */
+@media (min-width: 1081px) and (min-height: 780px) {
+  .app-container {
+    height: 100vh;
+  }
   .main-layout-streamlined {
-    grid-template-columns: 1fr;
+    height: calc(100vh - 72px);
+    overflow: hidden;
+  }
+}
+
+/* Medium Laptops & Tablets Landscape (<= 1180px) */
+@media (max-width: 1180px) {
+  .main-layout-streamlined {
+    grid-template-columns: 1fr 370px;
+    padding: 1rem 1.25rem;
+    gap: 1rem;
+  }
+}
+
+/* Tablets & Small Laptops (<= 1024px) or Small Viewport Heights (<= 780px) */
+@media (max-width: 1024px), (max-height: 780px) {
+  .app-container {
     height: auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .main-layout-streamlined {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+    padding: 1rem;
+    gap: 1.25rem;
+  }
+
+  .panel-card {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .main-workspace-panel {
+    height: auto;
+    overflow: visible;
+  }
+
+  .vitals-form-view {
+    height: auto;
+    overflow: visible;
+  }
+
+  .vitals-form-scroll {
+    height: auto;
+    max-height: unset;
+    overflow: visible;
+    padding: 1rem;
+  }
+
+  .chat-view-container {
+    height: auto;
+    overflow: visible;
+  }
+
+  .chat-history {
+    min-height: 380px;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .right-summary-panel {
+    height: auto;
+    overflow: visible;
+  }
+
+  .right-panel-content {
+    height: auto;
+    overflow: visible;
+    padding: 1.15rem;
+  }
+}
+
+/* Tablets Portrait & Large Mobile (<= 860px) */
+@media (max-width: 860px) {
+  .app-header {
+    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .brand-wrapper {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .header-controls {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .preset-dropdown-wrap {
+    flex: 1 1 200px;
+    width: 100%;
+  }
+
+  .preset-select {
+    width: 100%;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.8rem;
+  }
+
+  .task-selector {
+    display: flex;
+    flex: 2 1 280px;
+    width: 100%;
+  }
+
+  .task-btn {
+    flex: 1;
+    text-align: center;
+    font-size: 0.76rem;
+    padding: 0.42rem 0.6rem;
+    white-space: normal;
+  }
+
+  .main-layout-streamlined {
+    padding: 0.75rem;
+    gap: 1rem;
+  }
+}
+
+/* Mobile Screens (<= 640px) */
+@media (max-width: 640px) {
+  .app-header {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .brand-title {
+    font-size: 1.15rem;
+  }
+
+  .brand-subtitle {
+    font-size: 0.72rem;
+  }
+
+  .header-controls {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .preset-dropdown-wrap,
+  .task-selector {
+    width: 100%;
+    flex: none;
+  }
+
+  .task-btn {
+    font-size: 0.73rem;
+    padding: 0.4rem 0.4rem;
+  }
+
+  .panel-header {
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .mode-toggle-group {
+    width: 100%;
+  }
+
+  .mode-toggle-btn {
+    flex: 1;
+    justify-content: center;
+    font-size: 0.76rem;
+    padding: 0.38rem 0.5rem;
+  }
+
+  .form-card-section {
+    padding: 0.85rem 1rem;
+  }
+
+  .form-inputs-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.65rem;
+  }
+
+  .vital-field-box label {
+    font-size: 0.72rem;
+  }
+
+  .vital-field-box input,
+  .vital-field-box select {
+    padding: 0.48rem 0.65rem;
+    font-size: 0.84rem;
+  }
+
+  .form-footer-action-bar {
+    flex-direction: column;
+    padding: 0.85rem 1rem;
+    gap: 0.6rem;
+  }
+
+  .btn-predict-now,
+  .btn-send-to-chat {
+    width: 100%;
+    justify-content: center;
+    padding: 0.7rem 1rem;
+    font-size: 0.84rem;
+  }
+
+  .chat-bubble-row {
+    max-width: 96%;
+    gap: 0.55rem;
+  }
+
+  .avatar-badge {
+    width: 32px;
+    height: 32px;
+  }
+
+  .chat-bubble {
+    font-size: 0.86rem;
+    padding: 0.85rem 1rem;
+  }
+
+  .chat-input-area {
+    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+  }
+
+  .chat-textarea {
+    font-size: 0.86rem;
+    padding: 0.65rem 0.85rem;
+  }
+
+  .send-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .risk-number {
+    font-size: 2.3rem;
+  }
+
+  .risk-meter-card {
+    padding: 1rem;
+  }
+
+  .vitals-chips {
+    gap: 0.35rem;
+  }
+
+  .vital-chip {
+    font-size: 0.73rem;
+    padding: 0.25rem 0.55rem;
+  }
+
+  .shap-item-clean {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .shap-feature-name {
+    font-size: 0.82rem;
+  }
+
+  .shap-evidence-quote {
+    font-size: 0.72rem;
+  }
+}
+
+/* Very Small Mobile Phones (<= 400px) */
+@media (max-width: 400px) {
+  .brand-logo-img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand-title {
+    font-size: 1.05rem;
+  }
+
+  .brand-badge {
+    font-size: 0.62rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  .form-inputs-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .risk-number {
+    font-size: 2rem;
   }
 }
