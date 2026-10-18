@@ -45,6 +45,14 @@
   --radius-full: 9999px;
 }
 
+/* Hide Netlify Drawer / Badge */
+#netlify-drawer-root,
+[data-netlify-drawer],
+iframe[data-netlify-drawer],
+.netlify-drawer-root {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
