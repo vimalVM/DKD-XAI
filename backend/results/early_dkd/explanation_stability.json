@@ -1,0 +1,12 @@
+{
+  "bootstrap_fits": 25,
+  "mean_spearman_rank_corr": 0.7742074217130931,
+  "mean_top5_jaccard": 0.7146031746031746,
+  "top5_features_xgboost_shap": [
+    "Systolic BP",
+    "HbA1c",
+    "Age",
+    "Diabetes duration",
+    "HDL"
+  ]
+}

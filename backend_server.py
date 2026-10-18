@@ -55,19 +55,43 @@ DATA_DF = None
 EVIDENCE_BASE = []
 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 def load_resources():
     global DATA_DF, EVIDENCE_BASE, MODELS
-    if os.path.exists("dkd_nhanes_final.csv"):
-        DATA_DF = pd.read_csv("dkd_nhanes_final.csv")
-    if os.path.exists("dkd_evidence_base.json"):
-        with open("dkd_evidence_base.json", "r", encoding="utf-8") as f:
-            EVIDENCE_BASE = json.load(f)
+    csv_candidates = [
+        os.path.join(BASE_DIR, "dkd_nhanes_final.csv"),
+        "dkd_nhanes_final.csv",
+        os.path.join("backend", "dkd_nhanes_final.csv"),
+    ]
+    for c in csv_candidates:
+        if os.path.exists(c):
+            DATA_DF = pd.read_csv(c)
+            break
+
+    ev_candidates = [
+        os.path.join(BASE_DIR, "dkd_evidence_base.json"),
+        "dkd_evidence_base.json",
+        os.path.join("backend", "dkd_evidence_base.json"),
+    ]
+    for c in ev_candidates:
+        if os.path.exists(c):
+            with open(c, "r", encoding="utf-8") as f:
+                EVIDENCE_BASE = json.load(f)
+            break
 
     for task in ["dkd_any", "early_dkd"]:
-        path = os.path.join("results", task, "best_model.joblib")
-        if os.path.exists(path):
-            MODELS[task] = joblib.load(path)
-            print(f"[Backend] Loaded {task} best model: {MODELS[task]['name']}")
+        model_candidates = [
+            os.path.join(BASE_DIR, "results", task, "best_model.joblib"),
+            os.path.join("results", task, "best_model.joblib"),
+            os.path.join("backend", "results", task, "best_model.joblib"),
+        ]
+        for path in model_candidates:
+            if os.path.exists(path):
+                MODELS[task] = joblib.load(path)
+                print(f"[Backend] Loaded {task} best model from {path}: {MODELS[task]['name']}")
+                break
 
 
 @app.on_event("startup")

@@ -1,0 +1,76 @@
+{
+  "hba1c": {
+    "topic": "Glycaemic control",
+    "fact": "Sustained high blood glucose is associated with microvascular complications, including kidney complications. HbA1c is a measure of average glucose exposure, not a kidney-function test.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 11",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S246/163914/11-Chronic-Kidney-Disease-and-Risk-Management%20/"
+  },
+  "sbp": {
+    "topic": "Blood pressure",
+    "fact": "Blood-pressure management is an important part of reducing kidney and cardiovascular risk in people with diabetes. A single blood-pressure reading does not diagnose chronic kidney disease.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 11",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S246/163914/11-Chronic-Kidney-Disease-and-Risk-Management%20/"
+  },
+  "dbp": {
+    "topic": "Blood pressure",
+    "fact": "Blood-pressure management is an important part of reducing kidney and cardiovascular risk in people with diabetes. A single blood-pressure reading does not diagnose chronic kidney disease.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 11",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S246/163914/11-Chronic-Kidney-Disease-and-Risk-Management%20/"
+  },
+  "dm_duration_years": {
+    "topic": "Diabetes duration",
+    "fact": "Duration is useful clinical context: kidney disease may develop after years of diabetes, but it can also be present when type 2 diabetes is first diagnosed. Duration alone cannot establish kidney disease.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 11",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S246/163914/11-Chronic-Kidney-Disease-and-Risk-Management%20/"
+  },
+  "bmi": {
+    "topic": "Body weight",
+    "fact": "Weight management is part of comprehensive care for people with diabetes and kidney risk. BMI is a body-size measure and cannot diagnose kidney disease by itself.",
+    "source": "KDIGO 2022 Diabetes Management in CKD Guideline",
+    "source_url": "https://kdigo.org/guidelines/diabetes-ckd/kdigo-2022-clinical-practice-guideline-for-diabetes-management-in-ckd/"
+  },
+  "waist_cm": {
+    "topic": "Central body size",
+    "fact": "Waist size is a measure of central body size, not a kidney test. Interpret its model contribution as an association in this dataset rather than proof of a cause.",
+    "source": "Project methodology note: NHANES cross-sectional, non-causal attribution"
+  },
+  "insulin_use": {
+    "topic": "Diabetes treatment",
+    "fact": "Insulin use records a treatment choice. By itself, it does not establish diabetes severity or the presence of kidney disease; interpretation depends on clinical context.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 9",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S183/163934/9-Pharmacologic-Approaches-to-Glycemic-Treatment"
+  },
+  "diabetes_pills": {
+    "topic": "Diabetes treatment",
+    "fact": "Use of diabetes pills reflects a treatment plan. Medication use alone cannot diagnose kidney disease or prove that treatment caused the model prediction.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 9",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S183/163934/9-Pharmacologic-Approaches-to-Glycemic-Treatment"
+  },
+  "age": {
+    "topic": "Age",
+    "fact": "Kidney-risk assessment uses kidney markers such as eGFR and urine albumin alongside a person’s broader clinical context. Age alone cannot establish kidney disease.",
+    "source": "ADA Standards of Care in Diabetes—2026, Section 11",
+    "source_url": "https://diabetesjournals.org/care/article/49/Supplement_1/S246/163914/11-Chronic-Kidney-Disease-and-Risk-Management%20/"
+  },
+  "hdl": {
+    "topic": "Cholesterol",
+    "fact": "HDL cholesterol is a cardiometabolic measure, not a direct test for kidney disease. Its contribution here is a statistical association learned by this model.",
+    "source": "Project methodology note: NHANES cross-sectional, non-causal attribution"
+  },
+  "total_chol": {
+    "topic": "Cholesterol",
+    "fact": "Total cholesterol is a cardiometabolic measure, not a direct test for kidney disease. Its contribution here is a statistical association learned by this model.",
+    "source": "Project methodology note: NHANES cross-sectional, non-causal attribution"
+  },
+  "female": {
+    "topic": "Sex",
+    "fact": "Sex is a demographic model input. A SHAP contribution describes how this model used the variable in its training data; it does not mean sex itself caused the predicted result.",
+    "source": "Project methodology note: NHANES cross-sectional, non-causal attribution"
+  },
+  "dm_diagnosed": {
+    "topic": "Reported diabetes diagnosis",
+    "fact": "A reported clinician diagnosis is distinct from the HbA1c-based eligibility rule used to form this study cohort. This variable records reported diagnosis status, not kidney status.",
+    "source": "NHANES data documentation and project cohort definition",
+    "source_url": "https://wwwn.cdc.gov/nchs/nhanes/search/datapage.aspx"
+  }
+}

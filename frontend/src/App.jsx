@@ -16,6 +16,8 @@ import {
   X
 } from 'lucide-react';
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
 const DEFAULT_SAMPLES = [
   {
     id: "sample-1",
@@ -94,12 +96,12 @@ export default function App() {
 
   // Fetch samples & health
   useEffect(() => {
-    fetch('/api/health')
+    fetch(`${API_BASE}/api/health`)
       .then(res => res.json())
       .then(data => setServerStatus(data.status))
       .catch(() => setServerStatus('offline'));
 
-    fetch('/api/sample-patients')
+    fetch(`${API_BASE}/api/sample-patients`)
       .then(res => res.json())
       .then(data => setSamples(data))
       .catch(err => console.error("Could not load samples", err));
@@ -115,7 +117,7 @@ export default function App() {
   }, [messages, loading]);
 
   const runDirectPrediction = (patientData, activeTask) => {
-    fetch('/api/predict', {
+    fetch(`${API_BASE}/api/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patient: patientData, task: activeTask })
@@ -161,7 +163,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
