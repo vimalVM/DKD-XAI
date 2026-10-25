@@ -466,8 +466,10 @@ export default function App() {
               Early DKD vs None (MLP)
             </button>
           </div>
+        </div>
 
-          {/* User Profile Pill & Sign Out */}
+        {/* User Profile Pill & Sign Out in Right Corner */}
+        <div className="header-user-corner">
           <div className="user-profile-pill">
             <div className={`user-role-badge ${userRole}`}>
               {userRole === 'doctor' ? <Stethoscope size={13} /> : <HeartHandshake size={13} />}

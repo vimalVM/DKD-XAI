@@ -7,8 +7,7 @@ import {
   User,
   ArrowRight,
   CheckCircle2,
-  AlertCircle,
-  Database
+  AlertCircle
 } from 'lucide-react';
 import {
   signInUser,
@@ -272,16 +271,6 @@ export default function AuthView({ onAuthSuccess }) {
             <HeartHandshake size={13} />
             <span>⚡ Demo Patient</span>
           </button>
-        </div>
-
-        {/* Footer info & Supabase status badge */}
-        <div className="auth-footer-badge">
-          <Database size={11} />
-          <span>
-            {isConfigured
-              ? 'Supabase Cloud Connected'
-              : 'Supabase Ready'}
-          </span>
         </div>
       </div>
     </div>
