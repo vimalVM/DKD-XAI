@@ -802,8 +802,8 @@ export default function App() {
                 <div className={`risk-status-pill ${isHighRisk ? 'high' : 'low'}`}>
                   {isHighRisk ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
                   {isHighRisk 
-                    ? (userRole === 'doctor' ? 'HIGH RISK' : 'ATTENTION RECOMMENDED')
-                    : (userRole === 'doctor' ? 'LOW RISK' : 'LOOKS HEALTHY')}
+                    ? (userRole === 'doctor' ? 'HIGH RISK' : 'ELEVATED RISK')
+                    : (userRole === 'doctor' ? 'LOW RISK' : 'LOW RISK')}
                 </div>
               </div>
 
