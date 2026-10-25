@@ -13,8 +13,12 @@ import {
   ChevronDown,
   RotateCcw,
   SlidersHorizontal,
-  X
+  X,
+  LogOut,
+  HeartHandshake
 } from 'lucide-react';
+import AuthView from './AuthView';
+import { getStoredSession, signOutUser } from './supabaseClient';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
@@ -62,12 +66,33 @@ const DEFAULT_SAMPLES = [
 ];
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => getStoredSession());
+  const userRole = currentUser?.user_metadata?.role || 'doctor';
+  const userName = currentUser?.user_metadata?.full_name || (userRole === 'doctor' ? 'Dr. Sarah Jenkins' : 'John Doe');
+
+  const getInitialGreeting = (r) => {
+    if (r === 'patient') {
+      return (
+        "Hello! I am your **Kidney Health Assistant**.\n\n" +
+        "I'm here to help you understand your kidney health and how diabetes affects your body, in simple, friendly, everyday words.\n\n" +
+        "You can share your recent numbers (e.g. *'I am 58 years old, diabetes for 8 years, HbA1c 7.9%, blood pressure 135/85'*), " +
+        "pick an example case from the dropdown above, or ask any question about keeping your kidneys healthy!"
+      );
+    }
+    return (
+      "Hello! I am your **DKD-XAI Clinical AI Assistant**.\n\n" +
+      "You can describe a patient naturally in clinical terms, for example:\n" +
+      "> *\"71yo male with 16 years of diabetes, HbA1c 9.5%, BP 158/94, BMI 34, on insulin. What is his kidney risk?\"*\n\n" +
+      "Or pick any patient preset from the dropdown above to view an instant risk assessment."
+    );
+  };
+
   const [task, setTask] = useState('dkd_any');
   const [inputMode, setInputMode] = useState('form'); // 'form' | 'chat'
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hello! I am your **DKD-XAI Clinical AI Assistant**.\n\nYou can describe a patient naturally in clinical terms, for example:\n> *\"71yo male with 16 years of diabetes, HbA1c 9.5%, BP 158/94, BMI 34, on insulin. What is his kidney risk?\"*\n\nOr pick any patient preset from the dropdown above to view an instant risk assessment.",
+      content: getInitialGreeting(userRole),
       prediction: null
     }
   ]);
@@ -100,8 +125,6 @@ export default function App() {
     if (!chatHistoryRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatHistoryRef.current;
     const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
-    // Pin to bottom only if user is within 80px of bottom.
-    // If they scrolled up further, disable auto-scroll so they can read freely!
     isAutoScrollPinnedRef.current = distanceFromBottom <= 80;
   };
 
@@ -120,8 +143,8 @@ export default function App() {
 
   // Run initial prediction
   useEffect(() => {
-    runDirectPrediction(currentPatient, task);
-  }, [task]);
+    runDirectPrediction(currentPatient, task, userRole);
+  }, [task, userRole]);
 
   // Smart auto-scroll: only pins to bottom if user has not scrolled up
   useEffect(() => {
@@ -130,11 +153,11 @@ export default function App() {
     }
   }, [messages, loading]);
 
-  const runDirectPrediction = (patientData, activeTask) => {
+  const runDirectPrediction = (patientData, activeTask, currentRole = userRole) => {
     fetch(`${API_BASE}/api/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient: patientData, task: activeTask })
+      body: JSON.stringify({ patient: patientData, task: activeTask, role: currentRole })
     })
       .then(res => res.json())
       .then(data => setPrediction(data))
@@ -154,13 +177,13 @@ export default function App() {
     return () => stopStreaming();
   }, []);
 
-  const handleResetChat = () => {
+  const handleResetChat = (r = userRole) => {
     stopStreaming();
     isAutoScrollPinnedRef.current = true;
     setMessages([
       {
         role: 'assistant',
-        content: "### Welcome to DKD-XAI Clinical AI Assistant\n\nDescribe a patient naturally in clinical terms, for example:\n> *\"71yo male with 16 years of diabetes, HbA1c 9.5%, BP 158/94, BMI 34, on insulin. What is his kidney risk?\"*\n\nOr pick any patient preset from the dropdown above to view an instant risk assessment.",
+        content: getInitialGreeting(r),
         prediction: null
       }
     ]);
@@ -194,7 +217,8 @@ export default function App() {
         body: JSON.stringify({
           message: text,
           task: task,
-          current_patient: patientToSend
+          current_patient: patientToSend,
+          role: userRole
         })
       });
 
@@ -375,6 +399,19 @@ export default function App() {
   const isHighRisk = prediction ? prediction.high_risk : false;
   const thresholdVal = prediction ? prediction.threshold_percentage : 51.3;
 
+  if (!currentUser) {
+    return (
+      <AuthView
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          const r = user?.user_metadata?.role || 'doctor';
+          handleResetChat(r);
+          runDirectPrediction(currentPatient, task, r);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Top Navigation Bar */}
@@ -383,10 +420,15 @@ export default function App() {
           <img src="/logo.png" alt="DKD-XAI Logo" className="brand-logo-img" />
           <div>
             <div className="brand-title">
-              DKD-XAI <span className="brand-badge">Clinical Assistant</span>
+              DKD-XAI{' '}
+              <span className={`brand-badge ${userRole}`}>
+                {userRole === 'doctor' ? 'Clinical Assistant' : 'Patient Assistant'}
+              </span>
             </div>
             <div className="brand-subtitle">
-              Explainable AI for Early Diabetic Kidney Disease Risk
+              {userRole === 'doctor'
+                ? 'Explainable AI for Early Diabetic Kidney Disease Risk'
+                : 'Simple, Friendly Kidney Health Guide & Screening'}
             </div>
           </div>
         </div>
@@ -422,6 +464,28 @@ export default function App() {
               onClick={() => setTask('early_dkd')}
             >
               Early DKD vs None (MLP)
+            </button>
+          </div>
+
+          {/* User Profile Pill & Sign Out */}
+          <div className="user-profile-pill">
+            <div className={`user-role-badge ${userRole}`}>
+              {userRole === 'doctor' ? <Stethoscope size={13} /> : <HeartHandshake size={13} />}
+              <span>{userRole === 'doctor' ? 'Doctor' : 'Patient'}</span>
+            </div>
+            <span className="user-name-label" title={userName}>
+              {userName}
+            </span>
+            <button 
+              type="button" 
+              className="signout-btn" 
+              title="Sign Out"
+              onClick={async () => {
+                await signOutUser();
+                setCurrentUser(null);
+              }}
+            >
+              <LogOut size={14} />
             </button>
           </div>
         </div>
@@ -714,10 +778,11 @@ export default function App() {
         <aside className="panel-card right-summary-panel">
           <div className="panel-header">
             <div className="panel-title">
-              <Sparkles size={16} color="#0F766E" /> Risk & Key Factors
+              <Sparkles size={16} color={userRole === 'doctor' ? '#0F766E' : '#2563EB'} />
+              {userRole === 'doctor' ? 'Risk & Key Factors' : 'Your Kidney Health Summary'}
             </div>
             <span className="badge-model">
-              {prediction ? prediction.model_name : 'XGBoost'}
+              {userRole === 'doctor' ? (prediction ? prediction.model_name : 'XGBoost') : 'Personal Guide'}
             </span>
           </div>
 
@@ -726,15 +791,19 @@ export default function App() {
             <div className="risk-meter-card">
               <div className="risk-top-row">
                 <div>
-                  <div className="risk-number" style={{ color: isHighRisk ? '#DC2626' : '#0F766E' }}>
+                  <div className="risk-number" style={{ color: isHighRisk ? '#DC2626' : (userRole === 'doctor' ? '#0F766E' : '#2563EB') }}>
                     {riskVal}%
                   </div>
-                  <div className="risk-caption">Predicted DKD Risk</div>
+                  <div className="risk-caption">
+                    {userRole === 'doctor' ? 'Predicted DKD Risk' : 'Estimated Kidney Risk'}
+                  </div>
                 </div>
 
                 <div className={`risk-status-pill ${isHighRisk ? 'high' : 'low'}`}>
                   {isHighRisk ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
-                  {isHighRisk ? 'HIGH RISK' : 'LOW RISK'}
+                  {isHighRisk 
+                    ? (userRole === 'doctor' ? 'HIGH RISK' : 'ATTENTION RECOMMENDED')
+                    : (userRole === 'doctor' ? 'LOW RISK' : 'LOOKS HEALTHY')}
                 </div>
               </div>
 
@@ -746,7 +815,9 @@ export default function App() {
                     width: `${Math.min(riskVal, 100)}%`,
                     background: isHighRisk 
                       ? 'linear-gradient(90deg, #F59E0B, #DC2626)' 
-                      : 'linear-gradient(90deg, #0F766E, #2563EB)'
+                      : (userRole === 'doctor'
+                          ? 'linear-gradient(90deg, #0F766E, #2563EB)'
+                          : 'linear-gradient(90deg, #10B981, #2563EB)')
                   }}
                 />
                 {/* Threshold Marker */}
@@ -780,17 +851,26 @@ export default function App() {
 
             {/* Top SHAP Drivers */}
             <div className="shap-factors-section">
-              <div className="section-label">Top Contributing Factors (SHAP)</div>
+              <div className="section-label">
+                {userRole === 'doctor' ? 'Top Contributing Factors (SHAP)' : 'Key Health Factors & What They Mean'}
+              </div>
               <div className="shap-card-list">
                 {prediction && prediction.top_contributors ? (
                   prediction.top_contributors.map((c, i) => (
                     <div key={i} className={`shap-item-clean ${c.shap_value > 0 ? 'risk-up' : 'risk-down'}`}>
                       <div className="shap-item-header">
                         <span className="shap-feature-name">
-                          {c.label} {c.value !== null && <span className="shap-feature-val">({c.value})</span>}
+                          {userRole === 'patient' && c.feature === 'hba1c' ? 'Blood Sugar (HbA1c)' :
+                           userRole === 'patient' && c.feature === 'sbp' ? 'Blood Pressure (Systolic)' :
+                           userRole === 'patient' && c.feature === 'dm_duration_years' ? 'Years with Diabetes' :
+                           userRole === 'patient' && c.feature === 'insulin_use' ? 'Insulin Medication' :
+                           userRole === 'patient' && c.feature === 'bmi' ? 'Body Weight / BMI' :
+                           c.label} {c.value !== null && <span className="shap-feature-val">({c.value})</span>}
                         </span>
                         <span className={`shap-tag ${c.shap_value > 0 ? 'up' : 'down'}`}>
-                          {c.shap_value > 0 ? `+${(c.shap_value * 100).toFixed(1)}%` : `${(c.shap_value * 100).toFixed(1)}%`}
+                          {userRole === 'patient'
+                            ? (c.shap_value > 0 ? 'Adds Risk' : 'Protective')
+                            : (c.shap_value > 0 ? `+${(c.shap_value * 100).toFixed(1)}%` : `${(c.shap_value * 100).toFixed(1)}%`)}
                         </span>
                       </div>
                       
@@ -820,7 +900,7 @@ export default function App() {
                   ))
                 ) : (
                   <div className="empty-notice">
-                    Chat with a patient profile to see live SHAP factors.
+                    Chat with a patient profile to see live factors.
                   </div>
                 )}
               </div>
@@ -829,7 +909,11 @@ export default function App() {
             {/* Faithfulness Badge */}
             <div className="faithfulness-badge-clean">
               <ShieldCheck size={16} color="#10b981" />
-              <span>Grounded in ADA 2026 & KDIGO Guidelines</span>
+              <span>
+                {userRole === 'doctor'
+                  ? 'Grounded in ADA 2026 & KDIGO Guidelines'
+                  : 'Verified against Clinical Diabetes & Kidney Health Standards'}
+              </span>
             </div>
 
           </div>

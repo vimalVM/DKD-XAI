@@ -1378,3 +1378,526 @@ body {
     font-size: 2rem;
   }
 }
+
+/* ==========================================================================
+   MINIMAL MODERN AUTHENTICATION & ROLE SELECTION STYLES
+   ========================================================================== */
+.auth-page-container {
+  min-height: 100vh;
+  width: 100vw;
+  background: radial-gradient(circle at 20% 20%, #E6F4F1 0%, #F1F6F9 45%, #E2ECF1 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.25rem;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.auth-ambient-glow-1 {
+  position: absolute;
+  top: -100px;
+  left: -80px;
+  width: 480px;
+  height: 480px;
+  background: radial-gradient(circle, rgba(15, 118, 110, 0.18) 0%, rgba(15, 118, 110, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(40px);
+}
+
+.auth-ambient-glow-2 {
+  position: absolute;
+  bottom: -120px;
+  right: -100px;
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, rgba(37, 99, 235, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(40px);
+}
+
+.auth-card-wrapper {
+  width: 100%;
+  max-width: 540px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 28px;
+  box-shadow: 
+    0 30px 70px -15px rgba(15, 118, 110, 0.14),
+    0 0 0 1px rgba(226, 232, 240, 0.7);
+  padding: 2.5rem 2.25rem;
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.auth-brand-header {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.auth-logo-badge {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.15);
+  margin: 0 auto 0.85rem auto;
+  border: 1px solid #E2E8F0;
+}
+
+.auth-logo-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.auth-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #0F172A;
+  margin: 0 0 0.35rem 0;
+}
+
+.auth-subtitle {
+  font-size: 0.92rem;
+  color: #64748B;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Role Selector */
+.auth-role-section {
+  margin-bottom: 1.5rem;
+}
+
+.auth-role-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475569;
+  margin-bottom: 0.65rem;
+}
+
+.auth-role-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.auth-role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 1rem;
+  border-radius: 18px;
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  cursor: pointer;
+  transition: all 0.22s ease-in-out;
+  position: relative;
+  width: 100%;
+}
+
+.auth-role-card:hover {
+  transform: translateY(-2px);
+  border-color: #CBD5E1;
+  background: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+}
+
+.auth-role-card.active-doctor {
+  background: #F0FDFA;
+  border-color: #0F766E;
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.14), 0 0 0 1px #0F766E;
+}
+
+.auth-role-card.active-patient {
+  background: #EFF6FF;
+  border-color: #2563EB;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.14), 0 0 0 1px #2563EB;
+}
+
+.auth-role-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+  transition: all 0.2s;
+}
+
+.doctor-icon-box {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+
+.patient-icon-box {
+  background: #DBEAFE;
+  color: #2563EB;
+}
+
+.auth-role-info {
+  width: 100%;
+}
+
+.auth-role-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.auth-role-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.auth-role-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+
+.doctor-pill {
+  background: #E6FFFA;
+  color: #0F766E;
+}
+
+.patient-pill {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.auth-role-desc {
+  font-size: 0.76rem;
+  color: #64748B;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.auth-role-check {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  color: #0F766E;
+}
+
+.auth-role-card.active-patient .auth-role-check {
+  color: #2563EB;
+}
+
+/* Tabs Slider */
+.auth-tabs-slider {
+  display: flex;
+  background: #E2E8F0;
+  padding: 0.3rem;
+  border-radius: 14px;
+  margin-bottom: 1.35rem;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 0.55rem;
+  border: none;
+  background: transparent;
+  color: #64748B;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.auth-tab-btn.active-tab {
+  background: #FFFFFF;
+  color: #0F172A;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Form Styles */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-input-group label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.35rem;
+}
+
+.auth-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: #F8FAFC;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 12px;
+  padding: 0 0.85rem;
+  transition: all 0.2s;
+}
+
+.auth-input-wrapper:focus-within {
+  background: #FFFFFF;
+  border-color: #0F766E;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.auth-role-card.active-patient ~ .auth-form .auth-input-wrapper:focus-within {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.auth-input-icon {
+  color: #94A3B8;
+  margin-right: 0.65rem;
+  flex-shrink: 0;
+}
+
+.auth-input-wrapper input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0.72rem 0;
+  font-size: 0.92rem;
+  color: #0F172A;
+  outline: none;
+  font-family: inherit;
+}
+
+.auth-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: none;
+  color: #FFFFFF;
+  font-size: 0.94rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  transition: all 0.22s ease-in-out;
+  margin-top: 0.5rem;
+}
+
+.auth-submit-btn.btn-doctor {
+  background: linear-gradient(135deg, #0F766E 0%, #115E59 100%);
+  box-shadow: 0 6px 20px rgba(15, 118, 110, 0.35);
+}
+
+.auth-submit-btn.btn-doctor:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.45);
+}
+
+.auth-submit-btn.btn-patient {
+  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+}
+
+.auth-submit-btn.btn-patient:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.45);
+}
+
+.auth-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Alert messages */
+.auth-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+}
+
+.auth-alert.error-alert {
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
+.auth-alert.success-alert {
+  background: #F0FDF4;
+  color: #16A34A;
+  border: 1px solid #BBF7D0;
+}
+
+/* Demo preset buttons */
+.auth-demo-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.5rem 0 0.85rem 0;
+}
+
+.auth-demo-divider::before,
+.auth-demo-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.auth-demo-divider span {
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  color: #94A3B8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.auth-demo-buttons-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.auth-demo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px dashed;
+  transition: all 0.2s;
+  background: #FFFFFF;
+}
+
+.demo-doc-btn {
+  color: #0F766E;
+  border-color: #5EEAD4;
+}
+
+.demo-doc-btn:hover {
+  background: #F0FDFA;
+  border-style: solid;
+}
+
+.demo-pat-btn {
+  color: #2563EB;
+  border-color: #93C5FD;
+}
+
+.demo-pat-btn:hover {
+  background: #EFF6FF;
+  border-style: solid;
+}
+
+.auth-footer-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: #94A3B8;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+/* User Profile in Header */
+.user-profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  padding: 0.3rem 0.65rem 0.3rem 0.4rem;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.user-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+}
+
+.user-role-badge.doctor {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+
+.user-role-badge.patient {
+  background: #DBEAFE;
+  color: #2563EB;
+}
+
+.user-name-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1E293B;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signout-btn {
+  border: none;
+  background: transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.signout-btn:hover {
+  color: #DC2626;
+  background: #FEF2F2;
+}
+
+@media (max-width: 768px) {
+  .auth-role-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-demo-buttons-row {
+    grid-template-columns: 1fr;
+  }
+}

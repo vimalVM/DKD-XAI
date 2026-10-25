@@ -103,11 +103,13 @@ class ChatRequest(BaseModel):
     message: str
     task: Optional[str] = "dkd_any"
     current_patient: Optional[Dict[str, Any]] = None
+    role: Optional[str] = "doctor"  # "doctor" or "patient"
 
 
 class PredictRequest(BaseModel):
     patient: Dict[str, Any]
     task: Optional[str] = "dkd_any"
+    role: Optional[str] = "doctor"  # "doctor" or "patient"
 
 
 def extract_vitals_from_text(text: str) -> Dict[str, Any]:
@@ -364,7 +366,104 @@ def sanitize_nan(obj: Any) -> Any:
     return obj
 
 
-def run_prediction_and_explanation(patient_data: Dict[str, Any], task: str = "dkd_any") -> Dict[str, Any]:
+def deterministic_patient_explanation(patient_dict: Dict[str, Any], contributors: List[Dict[str, Any]]) -> str:
+    is_high = patient_dict.get("high_risk", False)
+    risk_pct = round(patient_dict.get("risk", 0.0) * 100, 1)
+
+    lines = []
+    if is_high:
+        lines.append(f"### Kidney Health Check: Attention Recommended ({risk_pct}% Risk Level)")
+        lines.append("Based on the health numbers you shared, your kidneys may be under extra stress from diabetes. Here is what this means in simple words:\n")
+    else:
+        lines.append(f"### Kidney Health Check: Low Risk ({risk_pct}% Risk Level)")
+        lines.append("Good news! Based on your current health numbers, your kidneys appear to be in a safer zone. Here is a simple look at your numbers:\n")
+
+    lines.append("**Key Things That Affect Your Kidneys:**")
+    for c in contributors[:4]:
+        feat = c.get("feature", "")
+        val = c.get("value")
+        val_str = f"{val:g}" if val is not None else ""
+        shap_val = c.get("shap_value", 0) or 0
+
+        if feat == "hba1c":
+            if val and val >= 7.5:
+                note = f"Blood Sugar (HbA1c of {val_str}%): Higher blood sugar over time can wear down the tiny filtering units in your kidneys."
+            else:
+                note = f"Blood Sugar (HbA1c of {val_str}%): Your blood sugar is closer to target, which helps keep kidneys healthy."
+        elif feat == "sbp":
+            if val and val >= 130:
+                note = f"Blood Pressure ({val_str} mmHg): Higher blood pressure puts extra physical stress on kidney blood vessels."
+            else:
+                note = f"Blood Pressure ({val_str} mmHg): Your blood pressure is in a healthy range, protecting kidney vessels."
+        elif feat == "dm_duration_years":
+            note = f"Diabetes History ({val_str} years): Living with diabetes for several years means regular kidney check-ups are especially important."
+        elif feat == "insulin_use":
+            note = f"Insulin Medication ({'Yes' if val == 1.0 else 'No'}): Taking insulin is part of managing diabetes; steady management protects kidneys."
+        elif feat == "bmi":
+            note = f"Body Weight / BMI ({val_str}): Maintaining a healthy weight helps improve both blood pressure and kidney health."
+        elif feat == "age":
+            note = f"Age ({val_str} years): Natural kidney filtering changes as we get older, making routine check-ups helpful."
+        else:
+            direction_word = "may add stress to kidneys" if shap_val > 0 else "is helping protect your kidneys"
+            note = f"{c.get('label', feat)}: This health factor {direction_word}."
+
+        icon = "⚠️" if shap_val > 0 else "✅"
+        lines.append(f"- {icon} {note}")
+
+    lines.append("\n**Simple Steps You Can Take:**")
+    if is_high:
+        lines.append("1. **Talk to your doctor**: Share these numbers and ask if a routine urine test (uACR) and blood test (eGFR) can be done to check your kidney function.")
+        lines.append("2. **Keep taking your medications**: Follow your doctor's prescriptions for blood sugar and blood pressure.")
+        lines.append("3. **Stay hydrated & active**: Drink plenty of water and aim for gentle daily activity like walking.")
+    else:
+        lines.append("1. **Keep up your healthy routines**: Continue taking your medications as prescribed and eating balanced meals.")
+        lines.append("2. **Routine annual check**: Ask your doctor to check your kidney health during your yearly check-up.")
+
+    lines.append("\n*Note: This is an educational screening guide, not an official medical diagnosis. Always discuss your personal health with your doctor.*")
+    return "\n".join(lines)
+
+
+def llm_patient_explanation(patient_dict: Dict[str, Any], contributors: List[Dict[str, Any]]) -> str:
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key or len(groq_key.strip()) < 5:
+        return deterministic_patient_explanation(patient_dict, contributors)
+
+    try:
+        from groq import Groq
+        client = Groq()
+        patient_prompt = (
+            "You are DKD-XAI, a warm, caring, empathetic health guide explaining diabetic kidney disease (DKD) risk "
+            "to an everyday patient (a non-medical person).\n\n"
+            "RULES:\n"
+            "1. Write in simple, encouraging, 6th-grade English. NO clinical jargon (no 'SHAP', 'uACR', 'eGFR thresholds', 'multivariate regressions').\n"
+            "2. Translate numbers into everyday terms (e.g. HbA1c -> 'average blood sugar', SBP -> 'blood pressure', BMI -> 'body weight').\n"
+            "3. Structure your response into:\n"
+            "   - **Overall Kidney Health Check**: Clearly say whether their risk is Low or Elevated in a warm, non-alarmist tone.\n"
+            "   - **What Your Numbers Mean**: 2-3 brief bullet points explaining what their blood sugar, blood pressure, etc. mean for their kidneys.\n"
+            "   - **Helpful Next Steps**: 2 simple, practical action steps (like chatting with their doctor at their next visit and taking prescribed meds).\n"
+            "4. End with a friendly reminder that this is an educational screening check and their doctor is their best health partner.\n"
+            "5. Keep it concise (under 180 words). Do not write a long essay."
+        )
+        user_content = (
+            f"Patient details: Risk estimate = {patient_dict.get('risk', 0.0)*100:.1f}%, High risk = {patient_dict.get('high_risk')}.\n"
+            f"Top factors: " + ", ".join([f"{c['label']} = {c.get('value')}" for c in contributors[:4]])
+        )
+        resp = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
+            messages=[
+                {"role": "system", "content": patient_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            temperature=0.2,
+            max_tokens=250
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[Backend] LLM patient explanation failed ({e}); falling back to deterministic.")
+        return deterministic_patient_explanation(patient_dict, contributors)
+
+
+def run_prediction_and_explanation(patient_data: Dict[str, Any], task: str = "dkd_any", role: str = "doctor") -> Dict[str, Any]:
     if task not in MODELS:
         raise HTTPException(status_code=400, detail=f"Model for task '{task}' not loaded.")
 
@@ -402,19 +501,25 @@ def run_prediction_and_explanation(patient_data: Dict[str, Any], task: str = "dk
     raw_contributors = top_contributors(patient_dict, k=5)
     contributors = retrieve_evidence(raw_contributors, "dkd_evidence_base.json")
 
-    # Explanation generation (Groq if available, else deterministic template)
+    # Explanation generation (branch based on doctor vs patient role)
     groq_key = os.getenv("GROQ_API_KEY")
     use_llm = bool(groq_key and len(groq_key.strip()) > 5)
 
-    if use_llm:
-        try:
-            explanation = llm_explanation(patient_dict, contributors)
-        except Exception as e:
-            print(f"[Backend] LLM call failed ({e}); falling back to deterministic explanation.")
-            explanation = deterministic_explanation(patient_dict, contributors)
-            use_llm = False
+    if role == "patient":
+        if use_llm:
+            explanation = llm_patient_explanation(patient_dict, contributors)
+        else:
+            explanation = deterministic_patient_explanation(patient_dict, contributors)
     else:
-        explanation = deterministic_explanation(patient_dict, contributors)
+        if use_llm:
+            try:
+                explanation = llm_explanation(patient_dict, contributors)
+            except Exception as e:
+                print(f"[Backend] LLM call failed ({e}); falling back to deterministic explanation.")
+                explanation = deterministic_explanation(patient_dict, contributors)
+                use_llm = False
+        else:
+            explanation = deterministic_explanation(patient_dict, contributors)
 
     def clean_str(s):
         if not isinstance(s, str):
@@ -522,11 +627,11 @@ def get_sample_patients():
 
 @app.post("/api/predict")
 def predict(req: PredictRequest):
-    return run_prediction_and_explanation(req.patient, req.task or "dkd_any")
+    return run_prediction_and_explanation(req.patient, req.task or "dkd_any", role=req.role or "doctor")
 
 
-def handle_general_or_clinical_qa(message: str) -> str:
-    """Intelligently handle general conversation, clinical QA, and off-topic guardrails."""
+def handle_general_or_clinical_qa(message: str, role: str = "doctor") -> str:
+    """Intelligently handle general conversation, clinical QA, and off-topic guardrails with role adaptation."""
     clean_msg = message.strip()
     msg_lower = clean_msg.lower()
 
@@ -537,6 +642,13 @@ def handle_general_or_clinical_qa(message: str) -> str:
         r"\b(?:bitcoin|crypto|stock\s+price|write\s+code|python\s+script)\b",
     ]
     if any(re.search(pat, msg_lower) for pat in off_topic_patterns):
+        if role == "patient":
+            return (
+                "Hello! I am your **Kidney Health Assistant**, designed specifically to help you understand "
+                "diabetic kidney health, blood sugar, and blood pressure.\n\n"
+                "I cannot answer questions about other unrelated topics.\n\n"
+                "Feel free to ask questions about keeping your kidneys healthy with diabetes, or share your numbers (like blood pressure or A1c) for a simple check!"
+            )
         return (
             "I am **DKD-XAI**, a clinical decision support assistant specialized strictly in "
             "**Diabetic Kidney Disease (DKD) risk prediction, nephrology guidelines (ADA 2026 / KDIGO), and clinical biomarker analysis**.\n\n"
@@ -545,27 +657,35 @@ def handle_general_or_clinical_qa(message: str) -> str:
             "or provide patient vitals for risk evaluation."
         )
 
-    # If Groq is available, use Groq with the strict DKD-XAI system guardrail
+    # If Groq is available, use Groq with role-adapted system guardrail
     if os.getenv("GROQ_API_KEY"):
         try:
             from groq import Groq
             client = Groq()
-            guardrail_prompt = (
-                "You are DKD-XAI, a specialized clinical AI assistant designed strictly for "
-                "Diabetic Kidney Disease (DKD) risk prediction, nephrology, and diabetes care.\n\n"
-                "CRITICAL RULES:\n"
-                "1. If the user asks an off-topic question outside diabetes, kidney disease, nephrology, or healthcare "
-                "(for example: asking about celebrities like Elon Musk, politics, sports, coding, movies, general trivia, weather, etc.):\n"
-                "   You MUST politely decline and reply:\n"
-                "   \"I am **DKD-XAI**, a clinical decision support assistant specialized strictly in "
-                "**Diabetic Kidney Disease (DKD) risk prediction, nephrology guidelines (ADA/KDIGO), and clinical biomarker analysis**. "
-                "I do not have knowledge about that topic.\n\n"
-                "   Please ask a valid clinical question related to diabetic kidney disease (such as regarding HbA1c, blood pressure control, or screening guidelines) "
-                "or provide patient vitals for risk evaluation.\"\n\n"
-                "2. If the user asks a legitimate clinical question about diabetic kidney disease, diabetes management, kidney labs (e.g., HbA1c, uACR, eGFR), or guidelines (ADA/KDIGO):\n"
-                "   Answer accurately and concisely in 2-3 structured bullet points with authoritative clinical guidance. Do not generate fake risk numbers.\n\n"
-                "3. If the user sends a greeting (e.g. 'hello', 'hi'), welcome them professionally and explain that they can either ask clinical DKD questions or describe a patient's vitals for risk stratification."
-            )
+
+            if role == "patient":
+                guardrail_prompt = (
+                    "You are DKD-XAI, a warm, caring, empathetic kidney health guide speaking with an everyday patient "
+                    "(a non-medical person living with or concerned about diabetes).\n\n"
+                    "RULES:\n"
+                    "1. If off-topic (e.g. celebrities, sports, weather, coding, politics), politely decline in a friendly way and explain you help with kidney health.\n"
+                    "2. If asked about kidney health, diabetes, tests (like A1c or urine tests), or diet/habits:\n"
+                    "   Answer in simple, encouraging, 6th-grade English. NO complicated medical jargon. Use simple analogies if helpful.\n"
+                    "3. If greeted, welcome them warmly and let them know they can ask questions about kidney health or share numbers (like blood sugar or blood pressure) for a simple check.\n"
+                    "4. Always be supportive, compassionate, and remind them their doctor is their best health advisor."
+                )
+            else:
+                guardrail_prompt = (
+                    "You are DKD-XAI, a specialized clinical AI assistant designed strictly for "
+                    "Diabetic Kidney Disease (DKD) risk prediction, nephrology, and diabetes care.\n\n"
+                    "CRITICAL RULES:\n"
+                    "1. If off-topic outside diabetes, kidney disease, or nephrology:\n"
+                    "   Politely decline and state your scope is DKD clinical decision support.\n"
+                    "2. If clinical question regarding DKD, biomarker evidence, or ADA 2026 / KDIGO guidelines:\n"
+                    "   Answer concisely with structured clinical bullet points and guideline references.\n"
+                    "3. If greeted, welcome the clinician and explain that they can input patient vitals or query nephrology decision pathways."
+                )
+
             resp = client.chat.completions.create(
                 model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
                 messages=[
@@ -580,6 +700,15 @@ def handle_general_or_clinical_qa(message: str) -> str:
             print(f"[Backend] Groq conversational call failed: {e}")
 
     # Fallback greeting
+    if role == "patient":
+        return (
+            "Hello! I am your **Kidney Health Assistant**.\n\n"
+            "I'm here to help you understand your kidney health and how diabetes can affect your body, in simple, plain terms.\n\n"
+            "You can:\n"
+            "- Share your recent numbers (e.g., *'I am 58 years old, diabetes for 8 years, HbA1c is 7.9%, blood pressure 135/85'*)\n"
+            "- Ask any question about how to protect your kidneys."
+        )
+
     return (
         "Hello! I am **DKD-XAI**, your clinical AI decision support assistant for **Diabetic Kidney Disease (DKD)**.\n\n"
         "You can:\n"
@@ -592,6 +721,7 @@ def handle_general_or_clinical_qa(message: str) -> str:
 def chat(req: ChatRequest):
     extracted = extract_patient_vitals_hybrid(req.message)
     user_msg_lower = req.message.lower().strip()
+    role = (req.role or "doctor").lower().strip()
 
     # Check if user explicitly asked to evaluate/analyze a patient
     explicit_patient_eval = bool(re.search(
@@ -606,7 +736,7 @@ def chat(req: ChatRequest):
 
     if not has_extracted_vitals and not explicit_patient_eval:
         # Conversational query, clinical Q&A, or off-topic question!
-        reply = handle_general_or_clinical_qa(req.message)
+        reply = handle_general_or_clinical_qa(req.message, role=role)
         return {
             "reply": reply,
             "patient": req.current_patient,
@@ -620,7 +750,7 @@ def chat(req: ChatRequest):
     # Check if we have minimum viable data to run inference
     has_minimum_data = any(updated_patient.get(k) is not None for k in ["age", "hba1c", "sbp", "bmi", "insulin_use"])
     if not has_minimum_data:
-        reply = handle_general_or_clinical_qa(req.message)
+        reply = handle_general_or_clinical_qa(req.message, role=role)
         return {
             "reply": reply,
             "patient": updated_patient,
@@ -628,41 +758,89 @@ def chat(req: ChatRequest):
         }
 
     # Run prediction and SHAP explanation
-    pred = run_prediction_and_explanation(updated_patient, req.task or "dkd_any")
+    pred = run_prediction_and_explanation(updated_patient, req.task or "dkd_any", role=role)
 
-    # Build clean, doctor-friendly conversational reply
     risk_pct = pred["risk_percentage"]
     thresh_pct = pred["threshold_percentage"]
     is_high = pred["high_risk"]
-    badge = "🔴 HIGH RISK" if is_high else "🟢 LOW RISK"
-    diff = "above" if is_high else "below"
 
-    reply = f"### Risk Assessment: {badge} ({risk_pct}%)\n\n"
-    reply += f"The patient's predicted risk is **{diff}** the clinical screening threshold of **{thresh_pct}%**.\n\n"
+    if role == "patient":
+        # Warm, layman-friendly format
+        status_title = "⚠️ Attention Recommended" if is_high else "✅ Low Risk"
+        reply = f"### Kidney Health Check: {status_title} ({risk_pct}%)\n\n"
+        if is_high:
+            reply += "Based on the numbers you provided, your kidneys may be experiencing extra strain from diabetes.\n\n"
+        else:
+            reply += "Good news! Based on the numbers you provided, your kidneys appear to be in a safer, healthy range.\n\n"
 
-    reply += "#### Key Contributing Factors:\n"
-    for c in pred["top_contributors"][:4]:
-        shap_val = c.get("shap_value", 0) or 0
-        shap_pct = shap_val * 100
-        sign = "+" if shap_pct > 0 else ""
-        impact_icon = "🔺" if shap_pct > 0 else "🔻"
-        val_str = f" ({c['value']:g})" if c.get("value") is not None else ""
-        reply += f"- {impact_icon} **{c['label']}{val_str}**: {sign}{shap_pct:.1f}% risk impact\n"
+        reply += "#### Key Factors In Your Health:\n"
+        for c in pred["top_contributors"][:4]:
+            shap_val = c.get("shap_value", 0) or 0
+            feat = c.get("feature", "")
+            val = c.get("value")
+            val_str = f" ({val:g})" if val is not None else ""
+            icon = "⚠️" if shap_val > 0 else "✅"
+            impact_desc = "may put extra strain on kidneys" if shap_val > 0 else "is helping protect your kidneys"
 
-    reply += "\n#### Recommended Clinical Action:\n"
-    if is_high:
-        reply += "- Order formal diagnostic labs: **uACR** (urine albumin) and **eGFR** (serum creatinine).\n"
-        reply += "- Optimize blood pressure (< 130/80 mmHg) and evaluate kidney-protective pharmacotherapy (SGLT2i / ACEi / ARB) per ADA 2026.\n"
+            friendly_label = c.get("label", feat)
+            if feat == "hba1c":
+                friendly_label = "Blood Sugar (HbA1c)"
+            elif feat == "sbp":
+                friendly_label = "Blood Pressure (Systolic)"
+            elif feat == "dm_duration_years":
+                friendly_label = "Years with Diabetes"
+            elif feat == "insulin_use":
+                friendly_label = "Insulin Medication"
+            elif feat == "bmi":
+                friendly_label = "Body Weight / BMI"
+
+            reply += f"- {icon} **{friendly_label}{val_str}**: {impact_desc}\n"
+
+        reply += "\n#### Simple Next Steps:\n"
+        if is_high:
+            reply += "- **Talk to your doctor**: Share these numbers and ask if a routine urine test (uACR) and blood test (eGFR) can be scheduled to check your kidney function.\n"
+            reply += "- **Keep taking your medications**: Follow your doctor's prescriptions for blood sugar and blood pressure.\n"
+            reply += "- **Healthy habits**: Drink water regularly and aim for gentle daily walking.\n"
+        else:
+            reply += "- **Keep up the good habits**: Continue eating well, staying active, and taking any medications as prescribed.\n"
+            reply += "- **Annual screening**: Ask your doctor to check your kidney labs once a year during regular checkups.\n"
+
+        if pred.get("explanation"):
+            reply += f"\n#### Summary for You:\n"
+            reply += f"{pred['explanation']}\n"
+
+        reply += f"\n*(Friendly Health Guide | Model: {pred['model_name']} | Always consult your doctor for medical advice)*"
     else:
-        reply += "- Routine annual surveillance: Continue periodic uACR and eGFR monitoring.\n"
-        reply += "- Maintain current glycemic control and cardiovascular risk reduction.\n"
+        # Clinician / Doctor format
+        badge = "🔴 HIGH RISK" if is_high else "🟢 LOW RISK"
+        diff = "above" if is_high else "below"
 
-    if pred.get("llm_used") and pred.get("explanation"):
-        reply += f"\n#### Clinical Synthesis (Groq AI):\n"
-        reply += f"{pred['explanation']}\n"
+        reply = f"### Risk Assessment: {badge} ({risk_pct}%)\n\n"
+        reply += f"The patient's predicted risk is **{diff}** the clinical screening threshold of **{thresh_pct}%**.\n\n"
 
-    ai_engine = f"Groq AI ({os.getenv('GROQ_MODEL', 'Qwen 27B')})" if pred.get("llm_used") else "Deterministic XAI Engine"
-    reply += f"\n*(Model: {pred['model_name']} | Engine: {ai_engine} | Faithfulness: 100% ADA 2026 Grounded)*"
+        reply += "#### Key Contributing Factors:\n"
+        for c in pred["top_contributors"][:4]:
+            shap_val = c.get("shap_value", 0) or 0
+            shap_pct = shap_val * 100
+            sign = "+" if shap_pct > 0 else ""
+            impact_icon = "🔺" if shap_pct > 0 else "🔻"
+            val_str = f" ({c['value']:g})" if c.get("value") is not None else ""
+            reply += f"- {impact_icon} **{c['label']}{val_str}**: {sign}{shap_pct:.1f}% risk impact\n"
+
+        reply += "\n#### Recommended Clinical Action:\n"
+        if is_high:
+            reply += "- Order formal diagnostic labs: **uACR** (urine albumin) and **eGFR** (serum creatinine).\n"
+            reply += "- Optimize blood pressure (< 130/80 mmHg) and evaluate kidney-protective pharmacotherapy (SGLT2i / ACEi / ARB) per ADA 2026.\n"
+        else:
+            reply += "- Routine annual surveillance: Continue periodic uACR and eGFR monitoring.\n"
+            reply += "- Maintain current glycemic control and cardiovascular risk reduction.\n"
+
+        if pred.get("llm_used") and pred.get("explanation"):
+            reply += f"\n#### Clinical Synthesis (Groq AI):\n"
+            reply += f"{pred['explanation']}\n"
+
+        ai_engine = f"Groq AI ({os.getenv('GROQ_MODEL', 'Qwen 27B')})" if pred.get("llm_used") else "Deterministic XAI Engine"
+        reply += f"\n*(Model: {pred['model_name']} | Engine: {ai_engine} | Faithfulness: 100% ADA 2026 Grounded)*"
 
     return sanitize_nan({
         "reply": reply,
