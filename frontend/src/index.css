@@ -90,9 +90,10 @@ body {
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  max-width: 1560px;
+  height: 100vh;
+  max-width: 1600px;
   margin: 0 auto;
+  overflow: hidden;
 }
 
 /* Header */
@@ -263,11 +264,13 @@ body {
   box-shadow: 0 0 8px rgba(22, 163, 74, 0.4);
 }
 
-/* Main 2-Column Clean Workspace */
+/* Main 2-Column Clean Workspace - Side-by-Side */
 .main-layout-streamlined {
   display: grid;
-  grid-template-columns: 1fr 410px;
+  grid-template-columns: 1fr 390px;
   flex: 1;
+  min-height: 0;
+  height: calc(100vh - 72px);
   overflow: hidden;
   gap: 1.25rem;
   padding: 1.25rem 1.75rem;
@@ -283,6 +286,8 @@ body {
   overflow: hidden;
   box-shadow: var(--shadow-md);
   position: relative;
+  height: 100%;
+  min-height: 0;
 }
 
 .panel-header {
@@ -365,12 +370,14 @@ body {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  min-height: 0;
 }
 
 .chat-view-container {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1071,31 +1078,27 @@ body {
    COMPREHENSIVE RESPONSIVE DESIGN FOR ALL SCREEN SIZES
    ======================================================== */
 
-/* Large Desktop Screens with Full Height */
-@media (min-width: 1081px) and (min-height: 780px) {
-  .app-container {
-    height: 100vh;
-  }
+/* Laptops & Standard Desktops (901px to 1280px) - Side-by-Side as earlier */
+@media (min-width: 901px) and (max-width: 1280px) {
   .main-layout-streamlined {
-    height: calc(100vh - 72px);
-    overflow: hidden;
+    grid-template-columns: 1fr 350px;
+    padding: 0.85rem 1.15rem;
+    gap: 1rem;
+    height: calc(100vh - 70px);
   }
-}
 
-/* Medium Laptops & Tablets Landscape (<= 1180px) */
-@media (max-width: 1180px) {
-  .main-layout-streamlined {
-    grid-template-columns: 1fr 370px;
-    padding: 1rem 1.25rem;
+  .right-panel-content {
+    padding: 1rem;
     gap: 1rem;
   }
 }
 
-/* Tablets & Small Laptops (<= 1024px) or Small Viewport Heights (<= 780px) */
-@media (max-width: 1024px), (max-height: 780px) {
+/* Smaller Screens: Tablets in Portrait & Mobile (<= 900px) - Risk Factor Shifts Down */
+@media (max-width: 900px) {
   .app-container {
     height: auto;
     min-height: 100vh;
+    overflow-y: auto;
     overflow-x: hidden;
   }
 
@@ -1131,14 +1134,18 @@ body {
     padding: 1rem;
   }
 
+  /* Self-contained chat box on smaller screens with independent scroll! */
   .chat-view-container {
-    height: auto;
-    overflow: visible;
+    height: 520px;
+    max-height: 65vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .chat-history {
-    min-height: 380px;
-    max-height: 60vh;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
   }
 
@@ -1149,6 +1156,7 @@ body {
 
   .right-panel-content {
     height: auto;
+    max-height: none;
     overflow: visible;
     padding: 1.15rem;
   }

@@ -92,7 +92,18 @@ export default function App() {
   const [prediction, setPrediction] = useState(null);
   const [samples, setSamples] = useState(DEFAULT_SAMPLES);
   const [serverStatus, setServerStatus] = useState('connecting');
-  const chatBottomRef = useRef(null);
+  const chatHistoryRef = useRef(null);
+  const isAutoScrollPinnedRef = useRef(true);
+
+  // Detect when user manually scrolls up in chat
+  const handleChatScroll = () => {
+    if (!chatHistoryRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatHistoryRef.current;
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    // Pin to bottom only if user is within 80px of bottom.
+    // If they scrolled up further, disable auto-scroll so they can read freely!
+    isAutoScrollPinnedRef.current = distanceFromBottom <= 80;
+  };
 
   // Fetch samples & health
   useEffect(() => {
@@ -112,8 +123,11 @@ export default function App() {
     runDirectPrediction(currentPatient, task);
   }, [task]);
 
+  // Smart auto-scroll: only pins to bottom if user has not scrolled up
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isAutoScrollPinnedRef.current && chatHistoryRef.current) {
+      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+    }
   }, [messages, loading]);
 
   const runDirectPrediction = (patientData, activeTask) => {
@@ -142,6 +156,7 @@ export default function App() {
 
   const handleResetChat = () => {
     stopStreaming();
+    isAutoScrollPinnedRef.current = true;
     setMessages([
       {
         role: 'assistant',
@@ -149,6 +164,9 @@ export default function App() {
         prediction: null
       }
     ]);
+    if (chatHistoryRef.current) {
+      chatHistoryRef.current.scrollTop = 0;
+    }
   };
 
   const handleSendMessage = async (textToSend, patientOverride) => {
@@ -156,11 +174,18 @@ export default function App() {
     if (!text.trim() || loading) return;
 
     stopStreaming();
+    isAutoScrollPinnedRef.current = true;
     const patientToSend = patientOverride || currentPatient;
     const userMsg = { role: 'user', content: text };
     setMessages(prev => [...prev, userMsg]);
     setInputMessage('');
     setLoading(true);
+
+    setTimeout(() => {
+      if (chatHistoryRef.current) {
+        chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+      }
+    }, 10);
 
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
@@ -625,7 +650,11 @@ export default function App() {
             </div>
           ) : (
             <div className="chat-view-container">
-              <div className="chat-history">
+              <div 
+                className="chat-history"
+                ref={chatHistoryRef}
+                onScroll={handleChatScroll}
+              >
                 {messages.map((m, idx) => (
                   <div key={idx} className={`chat-bubble-row ${m.role}`}>
                     <div className={`avatar-badge ${m.role}`}>
@@ -652,7 +681,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <div ref={chatBottomRef} />
               </div>
 
               {/* Chat Input Bar */}
