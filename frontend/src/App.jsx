@@ -267,8 +267,9 @@ export default function App() {
       });
 
       const data = await res.json();
-      if (data.patient) {
-        setCurrentPatient(data.patient);
+      if (data.patient !== undefined) {
+        const hasFields = data.patient && Object.keys(data.patient).some(k => data.patient[k] !== null && data.patient[k] !== undefined);
+        setCurrentPatient(hasFields ? data.patient : EMPTY_PATIENT);
       }
       if (data.prediction) {
         predictionRequestIdRef.current += 1;

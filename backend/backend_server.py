@@ -115,12 +115,19 @@ class PredictRequest(BaseModel):
 def detect_clinical_context(text: str) -> Dict[str, Any]:
     """Detect nuances such as explicit absence of diabetes, non-DKD vitamin deficiencies, or self-description."""
     t = text.lower()
-    no_diabetes = bool(re.search(
-        r"\b(never\s+had\s+(?:a\s+)?diabet(?:es|ics?)\s*(?:test|tests)?|no\s+diabet(?:es|ics?)|not\s+diabetic|"
-        r"never\s+tested\s+for\s+diabet(?:es|ics?)|don't\s+have\s+diabet(?:es|ics?)|haven't\s+had\s+(?:a\s+)?diabet(?:es|ics?)|"
-        r"no\s+history\s+of\s+diabet(?:es|ics?)|never\s+diagnosed\s+with\s+diabet(?:es|ics?))\b",
-        t
-    ))
+    
+    # Robust diabetes negation matching (handles typos, phrasing, contractions)
+    no_diabetes = bool(
+        re.search(
+            r"\b(never\s+had|never\s+checked|not\s+checked|dont\s+have\s+checked|don't\s+have\s+checked|"
+            r"havent\s+checked|haven't\s+checked|no\s+checked|didnt\s+check|didn't\s+check|"
+            r"never\s+tested|haven't\s+tested|havent\s+tested|not\s+tested|dont\s+have\s+tested|don't\s+have\s+tested|"
+            r"never\s+diagnosed|no\s+history\s+of|dont\s+have|don't\s+have|not\s+having|no\s+known|without)\b.*?"
+            r"\b(diabet(?:es|ics?)|sugar|a1c|glucose|blood\s*sugar)\b",
+            t
+        )
+        or re.search(r"\b(not\s+diabetic|non-diabetic|non\s+diabetic|never\s+diabetic)\b", t)
+    )
 
     vitamins = []
     if re.search(r"\bb12\b|\bvitamin\s*b12?\b", t):
@@ -132,8 +139,14 @@ def detect_clinical_context(text: str) -> Dict[str, Any]:
     if re.search(r"\bfolic\s*acid\b|\bfolate\b", t):
         vitamins.append("Folate")
 
-    is_self = bool(re.search(r"\b(i\s*am|i'm|my\s+age|my\s+name|hello\s+i'm|hi\s+i'm|hey|i\s+have)\b", t))
-    is_new_patient = bool(re.search(r"\b(new\s+patient|patient\s+is|a\s+\d{1,3}\s*yo|hello\s+i'm|i\s*am)\b", t))
+    is_self = bool(re.search(
+        r"\b(i\s*m|im|i\s*am|i'm|my\s+name|myself|hello|hi|hey|i\s+have|i\s+dont|i\s+don't|i\s+kniw|i\s+know)\b",
+        t
+    ))
+    is_new_patient = bool(re.search(
+        r"\b(new\s+patient|patient\s+is|a\s+\d{1,3}\s*yo|hello\b|hi\b|hey\b)\b",
+        t
+    ))
 
     return {
         "no_diabetes_testing": no_diabetes,
@@ -937,14 +950,19 @@ def chat(req: ChatRequest):
         k in extracted for k in ["hba1c", "sbp", "bmi", "insulin_use", "dm_duration_years", "age", "dbp", "waist_cm", "diabetes_pills"]
     )
 
-    # Check if this is a fresh consultation / personal introduction:
-    # If the user introduces themselves, mentions no diabetes testing, or describes a new case,
-    # DO NOT inherit properties from a prior benchmark patient!
-    if context["is_self_description"] or context["is_new_patient"] or context["no_diabetes_testing"]:
-        active_patient = dict(extracted)
-    else:
+    # Determine active patient context:
+    # Only inherit prior patient if the user explicitly asked to evaluate/analyze that patient!
+    if explicit_patient_eval:
         active_patient = dict(req.current_patient or {})
         active_patient.update(extracted)
+    elif context["is_self_description"] or context["is_new_patient"] or context["no_diabetes_testing"]:
+        active_patient = dict(extracted)
+    else:
+        # If vitals were extracted from this message, use what was extracted
+        if has_extracted_vitals:
+            active_patient = dict(extracted)
+        else:
+            active_patient = {}
 
     # Check sufficiency of clinical vitals
     suff = evaluate_vitals_sufficiency(active_patient, context)
@@ -953,11 +971,11 @@ def chat(req: ChatRequest):
         # If no vitals at all and no clinical mentions, handle as general QA
         if not has_extracted_vitals and not explicit_patient_eval and not context["no_diabetes_testing"] and not context["mentions_vitamins"]:
             reply = handle_general_or_clinical_qa(req.message, role=role)
-            return {
+            return sanitize_nan({
                 "reply": reply,
-                "patient": req.current_patient,
+                "patient": active_patient,
                 "prediction": None,
-            }
+            })
 
         # Otherwise, the user provided partial vitals or non-DKD info (like B12/D3):
         # We MUST NOT guess or default missing parameters!
