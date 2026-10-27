@@ -112,6 +112,37 @@ class PredictRequest(BaseModel):
     role: Optional[str] = "doctor"  # "doctor" or "patient"
 
 
+def detect_clinical_context(text: str) -> Dict[str, Any]:
+    """Detect nuances such as explicit absence of diabetes, non-DKD vitamin deficiencies, or self-description."""
+    t = text.lower()
+    no_diabetes = bool(re.search(
+        r"\b(never\s+had\s+(?:a\s+)?diabet(?:es|ics?)\s*(?:test|tests)?|no\s+diabet(?:es|ics?)|not\s+diabetic|"
+        r"never\s+tested\s+for\s+diabet(?:es|ics?)|don't\s+have\s+diabet(?:es|ics?)|haven't\s+had\s+(?:a\s+)?diabet(?:es|ics?)|"
+        r"no\s+history\s+of\s+diabet(?:es|ics?)|never\s+diagnosed\s+with\s+diabet(?:es|ics?))\b",
+        t
+    ))
+
+    vitamins = []
+    if re.search(r"\bb12\b|\bvitamin\s*b12?\b", t):
+        vitamins.append("Vitamin B12")
+    if re.search(r"\bd3?\b|\bvitamin\s*d3?\b", t):
+        vitamins.append("Vitamin D3")
+    if re.search(r"\biron\b", t):
+        vitamins.append("Iron")
+    if re.search(r"\bfolic\s*acid\b|\bfolate\b", t):
+        vitamins.append("Folate")
+
+    is_self = bool(re.search(r"\b(i\s*am|i'm|my\s+age|my\s+name|hello\s+i'm|hi\s+i'm|hey|i\s+have)\b", t))
+    is_new_patient = bool(re.search(r"\b(new\s+patient|patient\s+is|a\s+\d{1,3}\s*yo|hello\s+i'm|i\s*am)\b", t))
+
+    return {
+        "no_diabetes_testing": no_diabetes,
+        "mentions_vitamins": vitamins,
+        "is_self_description": is_self,
+        "is_new_patient": is_new_patient,
+    }
+
+
 def extract_vitals_from_text(text: str) -> Dict[str, Any]:
     """Extract ONLY the clinical vitals explicitly mentioned in the input text."""
     p: Dict[str, Any] = {}
@@ -189,8 +220,13 @@ def extract_vitals_from_text(text: str) -> Dict[str, Any]:
     if re.search(r"\b(?:metformin|diabetes\s*pills?|oral\s*meds?|on\s*pills?|medication)\b", t):
         p["diabetes_pills"] = 1.0
 
-    # Diagnosed diabetes
-    if p.get("insulin_use") == 1.0 or p.get("diabetes_pills") == 1.0 or ((p.get("dm_duration_years") or 0) > 0):
+    # Explicit no diabetes / never had diabetes test
+    if re.search(r"\b(never\s+had\s+(?:a\s+)?diabet(?:es|ics?)\s*(?:test|tests)?|no\s+diabet(?:es|ics?)|not\s+diabetic)\b", t):
+        p["dm_diagnosed"] = 0.0
+        p["insulin_use"] = 0.0
+        p["diabetes_pills"] = 0.0
+        p["dm_duration_years"] = 0.0
+    elif p.get("insulin_use") == 1.0 or p.get("diabetes_pills") == 1.0 or ((p.get("dm_duration_years") or 0) > 0):
         p["dm_diagnosed"] = 1.0
 
     # Cholesterol
@@ -232,10 +268,11 @@ def extract_vitals_with_llm(text: str) -> Dict[str, Any]:
             "- 'hdl': float (HDL cholesterol in mg/dL)\n"
             "- 'total_chol': float (Total cholesterol in mg/dL)\n\n"
             "CRITICAL RULES:\n"
-            "1. If the input is conversational (e.g., 'hello', 'how are you'), a general off-topic question (e.g. asking about celebrities, sports, weather), "
-            "or a conceptual clinical question WITHOUT specific patient values (e.g. 'what is uACR?'), return EXACTLY: {}\n"
-            "2. If diabetes duration, insulin, or diabetes pills are mentioned, the patient clearly has diabetes.\n"
-            "3. Return ONLY a valid JSON object. No markdown code blocks (no ```json), no preamble, no commentary."
+            "1. If the input is conversational (e.g., 'hello', 'how are you'), an off-topic question, "
+            "or a conceptual question without patient values, return EXACTLY: {}\n"
+            "2. If the user states they have never had diabetes tests or do NOT have diabetes, do NOT extract diabetes duration, insulin, or pills.\n"
+            "3. If vitamins (like B12, D3, iron) are mentioned, do NOT map them to any DKD keys.\n"
+            "4. Return ONLY a valid JSON object. No markdown code blocks (no ```json), no preamble, no commentary."
         )
 
         resp = client.chat.completions.create(
@@ -625,8 +662,173 @@ def get_sample_patients():
     return samples
 
 
+def evaluate_vitals_sufficiency(patient: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Evaluates whether patient data contains the necessary clinical parameters to compute
+    a valid Diabetic Kidney Disease (DKD) risk prediction without guessing or defaulting
+    critical diagnostic features.
+    """
+    if context and context.get("no_diabetes_testing"):
+        return {
+            "is_sufficient": False,
+            "reason": "no_diabetes_testing",
+            "message": "The patient explicitly states they have never had diabetes testing or do not have diabetes.",
+            "missing_fields": ["Confirmation of diabetes diagnosis", "HbA1c / Fasting Glucose", "Blood Pressure"]
+        }
+
+    age = patient.get("age")
+    hba1c = patient.get("hba1c")
+    sbp = patient.get("sbp")
+    dbp = patient.get("dbp")
+    bmi = patient.get("bmi")
+    dm_diagnosed = patient.get("dm_diagnosed")
+    insulin = patient.get("insulin_use")
+    pills = patient.get("diabetes_pills")
+    duration = patient.get("dm_duration_years")
+
+    missing = []
+    if age is None or age < 18:
+        missing.append("Age (adult >= 18)")
+
+    has_glycemic = (
+        (hba1c is not None and 3.0 <= hba1c <= 25.0)
+        or (dm_diagnosed == 1.0)
+        or (insulin == 1.0)
+        or (pills == 1.0)
+        or (duration is not None and duration > 0)
+    )
+    if not has_glycemic:
+        missing.append("Blood Sugar / Glycemic marker (HbA1c % or known diabetes diagnosis)")
+
+    has_pressure_or_metabolic = (
+        (sbp is not None and 60 <= sbp <= 260)
+        or (dbp is not None and 40 <= dbp <= 160)
+        or (bmi is not None and 12 <= bmi <= 80)
+    )
+    if not has_pressure_or_metabolic:
+        missing.append("Blood Pressure (Systolic/Diastolic) or BMI")
+
+    valid_features = [
+        k for k, v in patient.items()
+        if v is not None and k in FEATURES and not (isinstance(v, float) and math.isnan(v))
+    ]
+
+    if len(valid_features) < 3 or missing:
+        return {
+            "is_sufficient": False,
+            "reason": "insufficient_parameters",
+            "message": "Essential clinical parameters are missing. DKD risk calculation requires at least age, glycemic status, and blood pressure/BMI to avoid clinical hallucination.",
+            "missing_fields": missing if missing else ["At least 3 core clinical markers"],
+            "provided_fields": valid_features
+        }
+
+    return {
+        "is_sufficient": True,
+        "reason": "sufficient",
+        "message": "Clinical parameters meet criteria for DKD risk evaluation.",
+        "missing_fields": [],
+        "provided_fields": valid_features
+    }
+
+
+def build_incomplete_vitals_response(role: str, patient: Dict[str, Any], context: Dict[str, Any], suff: Dict[str, Any]) -> str:
+    """Generate a medically grounded, reassuring response explaining why risk was not predicted and what tests are needed."""
+    age_val = int(patient["age"]) if patient.get("age") is not None else None
+    vitamins = context.get("mentions_vitamins", [])
+    vitamins_str = " and ".join(vitamins) if vitamins else ""
+
+    if suff.get("reason") == "no_diabetes_testing":
+        if role == "patient":
+            vit_note = ""
+            if vitamins:
+                vit_note = (
+                    f"- **{vitamins_str} Deficiency**: Deficiencies in {vitamins_str} are nutritional concerns that affect energy, "
+                    "nerves, and bone health. However, they are **not biomarkers for Diabetic Kidney Disease** and do not indicate kidney damage.\n"
+                )
+
+            age_str = f"- **Age ({age_val})**: Age alone cannot tell us if your kidneys are healthy or at risk.\n" if age_val else ""
+
+            return (
+                "### Kidney Health Check: Unable to Calculate Risk (Essential Details Missing)\n\n"
+                "Thank you for sharing your details. We **cannot and will not calculate a kidney risk score** based only on the details provided, "
+                "because doing so would require assuming or guessing your health numbers, which is medically inaccurate and unsafe.\n\n"
+                "#### Important Facts About What You Shared:\n"
+                "- **No Diabetes Tests / History**: This screening assistant is specifically calibrated for **Diabetic Kidney Disease (DKD)**. "
+                "Because you have never had a diabetes test and have no diagnosed diabetes, a diabetic kidney risk evaluation does not apply to you.\n"
+                f"{vit_note}"
+                f"{age_str}\n"
+                "#### What Numbers Are Actually Needed to Check Kidney Health?\n"
+                "To properly evaluate kidney risk, healthcare providers require specific clinical tests:\n"
+                "1. **Blood Sugar (HbA1c or Fasting Glucose)**: To verify if blood sugar levels are healthy or if diabetes is present.\n"
+                "2. **Blood Pressure**: Elevated blood pressure places physical strain on the delicate filter units of the kidneys.\n"
+                "3. **Routine Kidney Function Tests**:\n"
+                "   - **uACR** (Urine Albumin-to-Creatinine Ratio): A urine test to check for microscopic protein leaks.\n"
+                "   - **eGFR** (from blood creatinine): Measures how efficiently kidneys filter waste products.\n\n"
+                "#### Recommended Next Steps:\n"
+                + (f"1. **Discuss your {vitamins_str} deficiency with your doctor**: Ask about appropriate supplements or dietary adjustments.\n" if vitamins else "")
+                + "2. **Routine wellness screening**: When you visit your clinic or doctor, ask for basic wellness screening, including blood pressure and standard fasting glucose or HbA1c.\n\n"
+                "*(Friendly Health Guide | DKD-XAI Educational System | Always consult your doctor for medical advice)*"
+            )
+        else:
+            vit_note = f"- **Non-DKD Biomarkers**: Reported {vitamins_str} deficiency represents nutritional status, which is non-informative for DKD risk.\n" if vitamins else ""
+            age_str = f"- **Demographic**: Age {age_val} captured.\n" if age_val else ""
+            return (
+                "### Clinical Assessment: Incomplete Clinical Profile (Assessment Deferred)\n\n"
+                "**Clinical Findings:**\n"
+                "- **Absence of Glycemic Markers**: The user explicitly indicates no prior diabetes testing or diagnosed diabetes. "
+                "DKD risk stratification cannot be applied without established glycemic context.\n"
+                f"{vit_note}"
+                f"{age_str}"
+                "- **Zero Imputation Safeguard**: Missing essential covariates are not imputed for risk estimation.\n\n"
+                "**Required Parameters for DKD Stratification:**\n"
+                "1. Glycemic exposure (HbA1c % or confirmed diabetes status with duration/pharmacotherapy)\n"
+                "2. Hemodynamic profile (Systolic and Diastolic Blood Pressure)\n"
+                "3. Diagnostic renal labs: Urine Albumin-to-Creatinine Ratio (uACR) and estimated GFR (CKD-EPI)\n\n"
+                "**Recommendation:**\n"
+                "Defer DKD risk stratification until formal glycemic and metabolic panels are obtained. "
+                + (f"Address {vitamins_str} deficiency according to standard clinical guidelines." if vitamins else "")
+            )
+
+    # General insufficient parameters
+    missing_list = suff.get("missing_fields", [])
+    missing_bullets = "\n".join([f"- **{m}**" for m in missing_list])
+
+    if role == "patient":
+        age_mention = f"your **Age ({age_val})**" if age_val else "some of your information"
+        return (
+            "### Kidney Health Check: Additional Numbers Needed\n\n"
+            f"We recorded {age_mention}, but we need a few more numbers to check your kidney health accurately.\n\n"
+            "We **do not make up or guess missing numbers**, because predicting risk with guessed numbers is medically inaccurate and unsafe.\n\n"
+            "#### What We Need to Check Your Kidney Health:\n"
+            "- **Blood Sugar (HbA1c %)** or whether you have been diagnosed with diabetes\n"
+            "- **Blood Pressure** (e.g., 130/80 mmHg)\n"
+            "- **Weight / Height or BMI** (optional, but helpful)\n\n"
+            "Please share your blood sugar or blood pressure readings (for example: *'My HbA1c is 7.2% and my blood pressure is 135/85'*), "
+            "and I will gladly provide an explainable kidney health check!\n\n"
+            "*(Friendly Health Guide | DKD-XAI Educational System | Always consult your doctor for medical advice)*"
+        )
+
+    return (
+        "### Clinical Assessment: Insufficient Parameters for Inference\n\n"
+        "Model prediction is deferred because the following essential covariates are missing:\n"
+        f"{missing_bullets}\n\n"
+        "To avoid unsafe clinical hallucination, the DKD-XAI engine requires at minimum Age, a glycemic indicator (HbA1c or diabetes history), "
+        "and blood pressure. Please provide these parameters to compute risk and SHAP attribution."
+    )
+
+
 @app.post("/api/predict")
 def predict(req: PredictRequest):
+    suff = evaluate_vitals_sufficiency(req.patient)
+    if not suff["is_sufficient"]:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "insufficient_vitals",
+                "message": suff["message"],
+                "missing_fields": suff["missing_fields"]
+            }
+        )
     return run_prediction_and_explanation(req.patient, req.task or "dkd_any", role=req.role or "doctor")
 
 
@@ -720,6 +922,7 @@ def handle_general_or_clinical_qa(message: str, role: str = "doctor") -> str:
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     extracted = extract_patient_vitals_hybrid(req.message)
+    context = detect_clinical_context(req.message)
     user_msg_lower = req.message.lower().strip()
     role = (req.role or "doctor").lower().strip()
 
@@ -734,31 +937,39 @@ def chat(req: ChatRequest):
         k in extracted for k in ["hba1c", "sbp", "bmi", "insulin_use", "dm_duration_years", "age", "dbp", "waist_cm", "diabetes_pills"]
     )
 
-    if not has_extracted_vitals and not explicit_patient_eval:
-        # Conversational query, clinical Q&A, or off-topic question!
-        reply = handle_general_or_clinical_qa(req.message, role=role)
-        return {
+    # Check if this is a fresh consultation / personal introduction:
+    # If the user introduces themselves, mentions no diabetes testing, or describes a new case,
+    # DO NOT inherit properties from a prior benchmark patient!
+    if context["is_self_description"] or context["is_new_patient"] or context["no_diabetes_testing"]:
+        active_patient = dict(extracted)
+    else:
+        active_patient = dict(req.current_patient or {})
+        active_patient.update(extracted)
+
+    # Check sufficiency of clinical vitals
+    suff = evaluate_vitals_sufficiency(active_patient, context)
+
+    if not suff["is_sufficient"]:
+        # If no vitals at all and no clinical mentions, handle as general QA
+        if not has_extracted_vitals and not explicit_patient_eval and not context["no_diabetes_testing"] and not context["mentions_vitamins"]:
+            reply = handle_general_or_clinical_qa(req.message, role=role)
+            return {
+                "reply": reply,
+                "patient": req.current_patient,
+                "prediction": None,
+            }
+
+        # Otherwise, the user provided partial vitals or non-DKD info (like B12/D3):
+        # We MUST NOT guess or default missing parameters!
+        reply = build_incomplete_vitals_response(role, active_patient, context, suff)
+        return sanitize_nan({
             "reply": reply,
-            "patient": req.current_patient,
+            "patient": active_patient,
             "prediction": None,
-        }
+        })
 
-    # Otherwise, patient vitals are present or evaluation was requested:
-    updated_patient = dict(req.current_patient or {})
-    updated_patient.update(extracted)
-
-    # Check if we have minimum viable data to run inference
-    has_minimum_data = any(updated_patient.get(k) is not None for k in ["age", "hba1c", "sbp", "bmi", "insulin_use"])
-    if not has_minimum_data:
-        reply = handle_general_or_clinical_qa(req.message, role=role)
-        return {
-            "reply": reply,
-            "patient": updated_patient,
-            "prediction": None,
-        }
-
-    # Run prediction and SHAP explanation
-    pred = run_prediction_and_explanation(updated_patient, req.task or "dkd_any", role=role)
+    # Run prediction and SHAP explanation on sufficient clinical data
+    pred = run_prediction_and_explanation(active_patient, req.task or "dkd_any", role=role)
 
     risk_pct = pred["risk_percentage"]
     thresh_pct = pred["threshold_percentage"]
@@ -844,7 +1055,7 @@ def chat(req: ChatRequest):
 
     return sanitize_nan({
         "reply": reply,
-        "patient": updated_patient,
+        "patient": active_patient,
         "prediction": pred,
     })
 

@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+/* eslint-disable react/prop-types */
+import { useState } from 'react';
 import {
-  Stethoscope,
-  HeartHandshake,
-  Mail,
-  Lock,
-  User,
+  Activity,
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  HeartHandshake,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  Stethoscope,
+  UserRound,
   AlertCircle
 } from 'lucide-react';
 import {
@@ -17,262 +22,196 @@ import {
   isSupabaseConfigured
 } from './supabaseClient';
 
+const ROLE_DETAILS = {
+  doctor: {
+    title: 'Doctor',
+    portal: 'Clinical workspace',
+    description: 'Assess patient vitals and explore explainable risk factors.',
+    Icon: Stethoscope,
+    firstName: 'Dr. Sarah Jenkins',
+    placeholder: 'doctor@hospital.org'
+  },
+  patient: {
+    title: 'Patient',
+    portal: 'Personal workspace',
+    description: 'Explore your kidney health with clear, supportive guidance.',
+    Icon: HeartHandshake,
+    firstName: 'John Doe',
+    placeholder: 'you@example.com'
+  }
+};
+
 export default function AuthView({ onAuthSuccess }) {
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
-  const [role, setRole] = useState('doctor'); // 'doctor' | 'patient'
+  const [stage, setStage] = useState('choose');
+  const [mode, setMode] = useState('signin');
+  const [role, setRole] = useState('doctor');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-
   const isConfigured = isSupabaseConfigured();
+  const roleDetails = ROLE_DETAILS[role];
+  const RoleIcon = roleDetails.Icon;
 
-  const handleDemoLogin = (demoRole) => {
-    const demoUser = DEMO_USERS[demoRole];
+  const openLogin = (nextRole) => {
+    setRole(nextRole);
+    setStage('login');
+    setMode('signin');
+    setErrorMsg('');
+    setSuccessMsg('');
+  };
+
+  const handleDemoLogin = () => {
+    const demoUser = DEMO_USERS[role];
     setStoredSession(demoUser);
     onAuthSuccess(demoUser);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
     setLoading(true);
 
     try {
-      if (mode === 'signup') {
-        if (!fullName.trim()) {
-          throw new Error('Please enter your full name.');
-        }
-        if (!email.trim() || !password.trim()) {
-          throw new Error('Please enter email and password.');
-        }
-        if (password.length < 6) {
-          throw new Error('Password should be at least 6 characters.');
-        }
+      if (!email.trim() || !password.trim()) {
+        throw new Error('Enter your email address and password to continue.');
+      }
 
-        const res = await signUpUser({
+      if (mode === 'signup') {
+        if (!fullName.trim()) throw new Error('Please enter your full name.');
+        if (password.length < 6) throw new Error('Use a password with at least 6 characters.');
+
+        const result = await signUpUser({
           email: email.trim(),
           password,
           fullName: fullName.trim(),
           role
         });
 
-        if (res?.user) {
-          setSuccessMsg('Account created successfully! Welcome.');
-          setTimeout(() => {
-            onAuthSuccess(res.user);
-          }, 500);
+        if (result?.user) {
+          setSuccessMsg('Your account is ready. Welcome to DKD-XAI.');
+          window.setTimeout(() => onAuthSuccess(result.user), 450);
         }
       } else {
-        if (!email.trim() || !password.trim()) {
-          throw new Error('Please enter email and password.');
-        }
-
-        const res = await signInUser({
-          email: email.trim(),
-          password
-        });
-
-        if (res?.user) {
+        const result = await signInUser({ email: email.trim(), password, role });
+        if (result?.user) {
           setSuccessMsg('Signed in successfully.');
-          setTimeout(() => {
-            onAuthSuccess(res.user);
-          }, 350);
+          window.setTimeout(() => onAuthSuccess(result.user), 350);
         }
       }
-    } catch (err) {
-      console.error('Auth error:', err);
-      setErrorMsg(err.message || 'Authentication failed. Please verify credentials.');
+    } catch (error) {
+      console.error('Auth error:', error);
+      setErrorMsg(error.message || 'Authentication failed. Please check your details.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-page-container">
-      {/* Background ambient lighting */}
-      <div className="auth-ambient-glow-1" />
-      <div className="auth-ambient-glow-2" />
+    <div className={`entry-page ${stage === 'login' ? 'entry-page-auth' : ''}`}>
+      <div className="entry-ambient entry-ambient-mint" />
+      <div className="entry-ambient entry-ambient-blue" />
+      <div className="entry-grid-pattern" />
 
-      <div className="auth-card-wrapper">
-        {/* Top Header & Branding (Compact Single Row) */}
-        <div className="auth-brand-row">
-          <div className="auth-logo-badge">
-            <img src="/logo.png" alt="DKD-XAI" className="auth-logo-img" />
-          </div>
-          <div>
-            <h1 className="auth-title">DKD-XAI</h1>
-            <p className="auth-subtitle">Diabetic Kidney Disease Risk Portal</p>
-          </div>
-        </div>
+      <header className="entry-header">
+        <a className="entry-brand" href="#home" aria-label="DKD-XAI home">
+          <span className="entry-brand-mark"><img src="/logo.png" alt="" /></span>
+          <span className="entry-brand-copy">
+            <strong>DKD-XAI</strong>
+            <span>Kidney health, made clearer</span>
+          </span>
+        </a>
+        <div className="entry-trust"><ShieldCheck size={15} /> Explainable clinical support</div>
+      </header>
 
-        {/* Compact Role Selection Buttons */}
-        <div className="auth-role-toggle-row">
-          <button
-            type="button"
-            className={`auth-role-pill-btn ${role === 'doctor' ? 'active-doctor' : ''}`}
-            onClick={() => setRole('doctor')}
-          >
-            <div className="auth-role-icon-circle doctor-circle">
-              <Stethoscope size={15} />
-            </div>
-            <div className="auth-role-text-col">
-              <span className="role-btn-title">Doctor</span>
-              <span className="role-btn-badge doctor-badge">Clinical Portal</span>
-            </div>
-          </button>
+      <main className="entry-main" id="home">
+        <section className="entry-copy" key={stage + mode + role}>
+          {stage === 'choose' ? (
+            <div className="entry-content entry-content-choose">
+              <div className="entry-eyebrow"><span className="eyebrow-pulse" /> A clearer view of kidney health</div>
+              <h1>Care that sees<br /><span>the whole picture.</span></h1>
+              <p className="entry-lede">A thoughtful space for diabetic kidney health—bringing clinical insights and everyday guidance together.</p>
 
-          <button
-            type="button"
-            className={`auth-role-pill-btn ${role === 'patient' ? 'active-patient' : ''}`}
-            onClick={() => setRole('patient')}
-          >
-            <div className="auth-role-icon-circle patient-circle">
-              <HeartHandshake size={15} />
-            </div>
-            <div className="auth-role-text-col">
-              <span className="role-btn-title">Patient</span>
-              <span className="role-btn-badge patient-badge">Layman Portal</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Auth Mode Tabs (Sign In / Register) */}
-        <div className="auth-tabs-slider">
-          <button
-            type="button"
-            className={`auth-tab-btn ${mode === 'signin' ? 'active-tab' : ''}`}
-            onClick={() => {
-              setMode('signin');
-              setErrorMsg('');
-              setSuccessMsg('');
-            }}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            className={`auth-tab-btn ${mode === 'signup' ? 'active-tab' : ''}`}
-            onClick={() => {
-              setMode('signup');
-              setErrorMsg('');
-              setSuccessMsg('');
-            }}
-          >
-            Create Account
-          </button>
-        </div>
-
-        {/* Feedback messages */}
-        {errorMsg && (
-          <div className="auth-alert error-alert">
-            <AlertCircle size={14} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-        {successMsg && (
-          <div className="auth-alert success-alert">
-            <CheckCircle2 size={14} />
-            <span>{successMsg}</span>
-          </div>
-        )}
-
-        {/* Input Form */}
-        <form onSubmit={handleSubmit} className="auth-form">
-          {mode === 'signup' && (
-            <div className="auth-input-group">
-              <label htmlFor="auth-fullname">Full Name</label>
-              <div className="auth-input-wrapper">
-                <User size={15} className="auth-input-icon" />
-                <input
-                  id="auth-fullname"
-                  type="text"
-                  placeholder={role === 'doctor' ? 'Dr. Sarah Jenkins' : 'John Doe'}
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
+              <div className="entry-role-heading">
+                <div>
+                  <span className="entry-step-label">GET STARTED</span>
+                  <h2>Choose your workspace</h2>
+                </div>
+                <span className="entry-step-count">01 <i /> 02</span>
               </div>
+
+              <div className="entry-role-list">
+                {['doctor', 'patient'].map((nextRole) => {
+                  const details = ROLE_DETAILS[nextRole];
+                  const Icon = details.Icon;
+                  return (
+                    <button className={`entry-role-card ${nextRole}`} key={nextRole} onClick={() => openLogin(nextRole)}>
+                      <span className="entry-role-icon"><Icon size={21} strokeWidth={1.8} /></span>
+                      <span className="entry-role-info">
+                        <strong>{details.title} login</strong>
+                        <span>{details.description}</span>
+                      </span>
+                      <span className="entry-role-arrow"><ArrowRight size={17} /></span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="entry-note"><LockKeyhole size={14} /> Your workspace is private and secure.</div>
+            </div>
+          ) : (
+            <div className="entry-content entry-content-login">
+              <button className="entry-back-button" type="button" onClick={() => { setStage('choose'); setErrorMsg(''); setSuccessMsg(''); }}>
+                <ArrowLeft size={15} /> Back to workspaces
+              </button>
+
+              <div className={`entry-login-heading ${role}`}>
+                <span className="entry-login-icon"><RoleIcon size={20} /></span>
+                <div><span>{roleDetails.portal}</span><h1>{mode === 'signin' ? `Welcome back, ${roleDetails.title.toLowerCase()}.` : 'Create your account.'}</h1></div>
+              </div>
+              <p className="entry-login-lede">{mode === 'signin' ? 'Sign in to continue to your kidney health workspace.' : `Join DKD-XAI as a ${roleDetails.title.toLowerCase()} and get started.`}</p>
+
+              <div className="entry-auth-tabs" role="tablist" aria-label="Account access">
+                <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'active' : ''} onClick={() => { setMode('signin'); setErrorMsg(''); setSuccessMsg(''); }}>Sign in</button>
+                <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setErrorMsg(''); setSuccessMsg(''); }}>Create account</button>
+              </div>
+
+              {errorMsg && <div className="entry-alert error" role="alert"><AlertCircle size={16} /><span>{errorMsg}</span></div>}
+              {successMsg && <div className="entry-alert success" role="status"><CheckCircle2 size={16} /><span>{successMsg}</span></div>}
+
+              <form className="entry-form" onSubmit={handleSubmit}>
+                {mode === 'signup' && <label className="entry-field"><span>Full name</span><div className="entry-input"><UserRound size={17} /><input type="text" autoComplete="name" placeholder={roleDetails.firstName} value={fullName} onChange={(event) => setFullName(event.target.value)} required /></div></label>}
+                <label className="entry-field"><span>Email address</span><div className="entry-input"><Mail size={17} /><input type="email" autoComplete="email" placeholder={roleDetails.placeholder} value={email} onChange={(event) => setEmail(event.target.value)} required /></div></label>
+                <label className="entry-field"><span>Password</span><div className="entry-input"><LockKeyhole size={17} /><input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} placeholder="At least 6 characters" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required /></div></label>
+                <button type="submit" disabled={loading} className={`entry-submit ${role}`}>
+                  {loading ? <><span className="entry-spinner" /> {mode === 'signup' ? 'Creating account…' : 'Signing in…'}</> : <>{mode === 'signup' ? 'Create account' : `Sign in as ${roleDetails.title.toLowerCase()}`} <ArrowRight size={17} /></>}
+                </button>
+              </form>
+
+              <button type="button" className="entry-demo-button" onClick={handleDemoLogin}><Sparkles size={15} /> Try the {roleDetails.title.toLowerCase()} demo <ArrowRight size={14} /></button>
+              {!isConfigured && <p className="entry-demo-hint"><Activity size={13} /> Demo access is available while account services are being configured.</p>}
             </div>
           )}
+        </section>
 
-          <div className="auth-input-group">
-            <label htmlFor="auth-email">Email Address</label>
-            <div className="auth-input-wrapper">
-              <Mail size={15} className="auth-input-icon" />
-              <input
-                id="auth-email"
-                type="email"
-                placeholder={role === 'doctor' ? 'doctor@hospital.org' : 'patient@gmail.com'}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-          </div>
+        <section className="entry-visual" aria-label="Kidney health illustration">
+          <div className="entry-orbit entry-orbit-one" />
+          <div className="entry-orbit entry-orbit-two" />
+          <div className="entry-visual-glow" />
+          <div className="entry-image-wrap"><img className="entry-kidney-image" src="/kidney-hero.png" alt="Illustration of healthy kidneys with a pulse line" /></div>
+          <div className="entry-floating-card entry-floating-top"><span className="floating-icon mint"><Activity size={16} /></span><span><strong>Whole-person view</strong><small>Vitals · risk · guidance</small></span><span className="floating-live-dot" /></div>
+          <div className="entry-floating-card entry-floating-bottom"><span className="floating-icon blue"><Sparkles size={16} /></span><span><strong>AI, made explainable</strong><small>Every insight has context</small></span><ArrowRight size={15} className="floating-card-arrow" /></div>
+          <div className="entry-visual-caption"><span>01</span><i /> <span>CARE, CONNECTED</span></div>
+          <div className="entry-visual-stamp"><span>DKD</span><small>Kidney care<br />intelligence</small></div>
+        </section>
+      </main>
 
-          <div className="auth-input-group">
-            <label htmlFor="auth-password">Password</label>
-            <div className="auth-input-wrapper">
-              <Lock size={15} className="auth-input-icon" />
-              <input
-                id="auth-password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`auth-submit-btn ${role === 'doctor' ? 'btn-doctor' : 'btn-patient'}`}
-          >
-            {loading ? (
-              <span className="auth-spinner">Processing...</span>
-            ) : (
-              <>
-                <span>
-                  {mode === 'signup'
-                    ? `Register as ${role === 'doctor' ? 'Doctor' : 'Patient'}`
-                    : `Sign In as ${role === 'doctor' ? 'Doctor' : 'Patient'}`}
-                </span>
-                <ArrowRight size={15} />
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Quick Demo 1-Click Access */}
-        <div className="auth-demo-divider">
-          <span>Or 1-click instant demo</span>
-        </div>
-
-        <div className="auth-demo-buttons-row">
-          <button
-            type="button"
-            className="auth-demo-btn demo-doc-btn"
-            onClick={() => handleDemoLogin('doctor')}
-          >
-            <Stethoscope size={13} />
-            <span>⚡ Demo Doctor</span>
-          </button>
-          <button
-            type="button"
-            className="auth-demo-btn demo-pat-btn"
-            onClick={() => handleDemoLogin('patient')}
-          >
-            <HeartHandshake size={13} />
-            <span>⚡ Demo Patient</span>
-          </button>
-        </div>
-      </div>
+      <footer className="entry-footer">
+        <span>DKD-XAI <i>•</i> Explainable kidney health support</span>
+        <span><ShieldCheck size={13} /> For informed conversations with your care team</span>
+      </footer>
     </div>
   );
 }

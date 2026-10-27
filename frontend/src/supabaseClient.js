@@ -90,7 +90,7 @@ export const signUpUser = async ({ email, password, fullName, role }) => {
   return { user: mockUser };
 };
 
-export const signInUser = async ({ email, password }) => {
+export const signInUser = async ({ email, password, role }) => {
   if (isSupabaseConfigured() && supabase) {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -112,7 +112,7 @@ export const signInUser = async ({ email, password }) => {
         email,
         user_metadata: {
           full_name: email.includes('dr') ? 'Dr. Clinician' : 'Registered User',
-          role: email.includes('dr') ? 'doctor' : 'patient'
+          role: role || (email.includes('dr') ? 'doctor' : 'patient')
         }
       };
   setStoredSession(user);

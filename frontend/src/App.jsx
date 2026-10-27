@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Activity, 
   Send, 
@@ -10,14 +10,14 @@ import {
   CheckCircle2, 
   Stethoscope, 
   Sparkles,
-  ChevronDown,
   RotateCcw,
   SlidersHorizontal,
-  X,
   LogOut,
-  HeartHandshake
+  HeartHandshake,
+  ArrowLeft
 } from 'lucide-react';
 import AuthView from './AuthView';
+import WorkspaceHub from './WorkspaceHub';
 import { getStoredSession, signOutUser } from './supabaseClient';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
@@ -65,8 +65,25 @@ const DEFAULT_SAMPLES = [
   }
 ];
 
+const EMPTY_PATIENT = {
+  age: null,
+  female: null,
+  hba1c: null,
+  bmi: null,
+  waist_cm: null,
+  sbp: null,
+  dbp: null,
+  hdl: null,
+  total_chol: null,
+  dm_diagnosed: null,
+  insulin_use: null,
+  diabetes_pills: null,
+  dm_duration_years: null
+};
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getStoredSession());
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
   const userRole = currentUser?.user_metadata?.role || 'doctor';
   const userName = currentUser?.user_metadata?.full_name || (userRole === 'doctor' ? 'Dr. Sarah Jenkins' : 'John Doe');
 
@@ -98,25 +115,13 @@ export default function App() {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showVitalsModal, setShowVitalsModal] = useState(false);
-  const [currentPatient, setCurrentPatient] = useState({
-    age: 68,
-    female: 1,
-    hba1c: 5.7,
-    bmi: 38.9,
-    waist_cm: 110,
-    sbp: 134,
-    dbp: 82,
-    hdl: 29,
-    total_chol: 193,
-    dm_diagnosed: 1,
-    insulin_use: 1,
-    diabetes_pills: 0,
-    dm_duration_years: 14
-  });
+  const [currentPatient, setCurrentPatient] = useState(EMPTY_PATIENT);
   const [prediction, setPrediction] = useState(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionError, setPredictionError] = useState('');
+  const [predictionAnimationKey, setPredictionAnimationKey] = useState(0);
+  const predictionRequestIdRef = useRef(0);
   const [samples, setSamples] = useState(DEFAULT_SAMPLES);
-  const [serverStatus, setServerStatus] = useState('connecting');
   const chatHistoryRef = useRef(null);
   const isAutoScrollPinnedRef = useRef(true);
 
@@ -128,23 +133,68 @@ export default function App() {
     isAutoScrollPinnedRef.current = distanceFromBottom <= 80;
   };
 
-  // Fetch samples & health
-  useEffect(() => {
-    fetch(`${API_BASE}/api/health`)
-      .then(res => res.json())
-      .then(data => setServerStatus(data.status))
-      .catch(() => setServerStatus('offline'));
+  const runDirectPrediction = useCallback(async (patientData, activeTask, currentRole = userRole) => {
+    // Only run if essential clinical markers are present:
+    const hasCore = patientData && patientData.age != null && (patientData.hba1c != null || patientData.dm_diagnosed === 1);
+    if (!hasCore) {
+      setPrediction(null);
+      setPredictionLoading(false);
+      setPredictionError('');
+      return null;
+    }
 
+    const requestId = ++predictionRequestIdRef.current;
+    setPredictionLoading(true);
+    setPredictionError('');
+    setPrediction(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patient: patientData, task: activeTask, role: currentRole })
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMsg = data?.detail?.message || `The prediction service returned an error (${response.status}).`;
+        throw new Error(errorMsg);
+      }
+      if (!data || !Number.isFinite(Number(data.risk_percentage))) {
+        throw new Error('The prediction service returned an incomplete result. Please try again.');
+      }
+      if (requestId !== predictionRequestIdRef.current) return null;
+
+      setPrediction(data);
+      setPredictionAnimationKey((key) => key + 1);
+      return data;
+    } catch (error) {
+      if (requestId !== predictionRequestIdRef.current) return null;
+      console.error('Prediction failed:', error);
+      setPrediction(null);
+      setPredictionError(
+        error instanceof TypeError
+          ? 'Could not connect to the prediction service. Check the API connection and try again.'
+          : (error.message || 'Unable to calculate risk. Please try again.')
+      );
+      return null;
+    } finally {
+      if (requestId === predictionRequestIdRef.current) setPredictionLoading(false);
+    }
+  }, [userRole]);
+
+  // Fetch example patients
+  useEffect(() => {
     fetch(`${API_BASE}/api/sample-patients`)
       .then(res => res.json())
       .then(data => setSamples(data))
       .catch(err => console.error("Could not load samples", err));
   }, []);
 
-  // Run initial prediction
+  // Keep the risk estimate in sync with the active profile and assessment.
   useEffect(() => {
     runDirectPrediction(currentPatient, task, userRole);
-  }, [task, userRole]);
+  }, [currentPatient, task, userRole, runDirectPrediction]);
 
   // Smart auto-scroll: only pins to bottom if user has not scrolled up
   useEffect(() => {
@@ -153,16 +203,7 @@ export default function App() {
     }
   }, [messages, loading]);
 
-  const runDirectPrediction = (patientData, activeTask, currentRole = userRole) => {
-    fetch(`${API_BASE}/api/predict`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient: patientData, task: activeTask, role: currentRole })
-    })
-      .then(res => res.json())
-      .then(data => setPrediction(data))
-      .catch(err => console.error("Prediction failed", err));
-  };
+
 
   const streamingTimerRef = useRef(null);
 
@@ -180,6 +221,9 @@ export default function App() {
   const handleResetChat = (r = userRole) => {
     stopStreaming();
     isAutoScrollPinnedRef.current = true;
+    setCurrentPatient(EMPTY_PATIENT);
+    setPrediction(null);
+    setPredictionError('');
     setMessages([
       {
         role: 'assistant',
@@ -224,10 +268,18 @@ export default function App() {
 
       const data = await res.json();
       if (data.patient) {
-        setCurrentPatient(prev => ({ ...prev, ...data.patient }));
+        setCurrentPatient(data.patient);
       }
       if (data.prediction) {
+        predictionRequestIdRef.current += 1;
         setPrediction(data.prediction);
+        setPredictionError('');
+        setPredictionLoading(false);
+        setPredictionAnimationKey((key) => key + 1);
+      } else {
+        setPrediction(null);
+        setPredictionLoading(false);
+        setPredictionError('');
       }
 
       setLoading(false);
@@ -297,14 +349,12 @@ export default function App() {
     const found = samples.find(s => s.id === sampleId);
     if (!found) return;
     setCurrentPatient(found.data);
-    runDirectPrediction(found.data, task);
     handleSendMessage(`Analyze benchmark patient: ${found.name} (${found.description})`, found.data);
   };
 
   const handleVitalChange = (field, val) => {
     const updated = { ...currentPatient, [field]: val === '' ? null : Number(val) };
     setCurrentPatient(updated);
-    runDirectPrediction(updated, task);
   };
 
   // Helper function to format bold, italic, and inline elements
@@ -404,6 +454,7 @@ export default function App() {
       <AuthView
         onAuthSuccess={(user) => {
           setCurrentUser(user);
+          setActiveWorkspace(null);
           const r = user?.user_metadata?.role || 'doctor';
           handleResetChat(r);
           runDirectPrediction(currentPatient, task, r);
@@ -412,8 +463,25 @@ export default function App() {
     );
   }
 
+  if (!activeWorkspace) {
+    return (
+      <WorkspaceHub
+        currentUser={currentUser}
+        onOpen={(workspace) => {
+          setInputMode(workspace === 'ai' ? 'chat' : 'form');
+          setActiveWorkspace(workspace);
+        }}
+        onSignOut={async () => {
+          await signOutUser();
+          setCurrentUser(null);
+          setActiveWorkspace(null);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="app-container">
+    <div className="app-container app-workspace-enter">
       {/* Top Navigation Bar */}
       <header className="app-header">
         <div className="brand-wrapper">
@@ -435,6 +503,14 @@ export default function App() {
 
         {/* Clean Controls in Header */}
         <div className="header-controls">
+          <button
+            type="button"
+            className="header-workspace-button"
+            onClick={() => setActiveWorkspace(null)}
+            aria-label="Return to workspace choices"
+          >
+            <ArrowLeft size={15} /> <span>Workspace</span>
+          </button>
           {/* Preset Patients Dropdown */}
           <div className="preset-dropdown-wrap">
             <select 
@@ -457,13 +533,13 @@ export default function App() {
               className={`task-btn ${task === 'dkd_any' ? 'active' : ''}`}
               onClick={() => setTask('dkd_any')}
             >
-              Any Damage (XGBoost)
+              Any Damage
             </button>
             <button 
               className={`task-btn ${task === 'early_dkd' ? 'active' : ''}`}
               onClick={() => setTask('early_dkd')}
             >
-              Early DKD vs None (MLP)
+              Early DKD vs None
             </button>
           </div>
         </div>
@@ -505,13 +581,13 @@ export default function App() {
                 className={`mode-toggle-btn ${inputMode === 'form' ? 'active' : ''}`}
                 onClick={() => setInputMode('form')}
               >
-                <SlidersHorizontal size={14} /> Clinical Vitals Form
+                <SlidersHorizontal size={14} /> Clinical Vital Forms
               </button>
               <button 
                 className={`mode-toggle-btn ${inputMode === 'chat' ? 'active' : ''}`}
                 onClick={() => setInputMode('chat')}
               >
-                <Bot size={14} /> AI Chat Assistant
+                <Bot size={14} /> AI Assist
               </button>
             </div>
 
@@ -697,11 +773,17 @@ export default function App() {
 
               {/* Form Action Footer */}
               <div className="form-footer-action-bar">
-                <button 
+                <button
                   className="btn-predict-now"
                   onClick={() => runDirectPrediction(currentPatient, task)}
+                  disabled={predictionLoading}
+                  aria-busy={predictionLoading}
                 >
-                  <Sparkles size={16} /> Predict Risk & Update XAI Factors
+                  {predictionLoading ? (
+                    <><Activity size={16} className="prediction-button-spinner" /> Calculating risk & XAI factors…</>
+                  ) : (
+                    <><Sparkles size={16} /> Predict Risk & Update XAI Factors</>
+                  )}
                 </button>
                 <button 
                   className="btn-send-to-chat"
@@ -784,28 +866,37 @@ export default function App() {
               {userRole === 'doctor' ? 'Risk & Key Factors' : 'Your Kidney Health Summary'}
             </div>
             <span className="badge-model">
-              {userRole === 'doctor' ? (prediction ? prediction.model_name : 'XGBoost') : 'Personal Guide'}
+              {predictionLoading ? 'Calculating…' : userRole === 'doctor' ? (prediction ? prediction.model_name : 'XGBoost') : 'Personal Guide'}
             </span>
           </div>
+
+          {predictionLoading && (
+            <div className="prediction-loading-message" role="status">
+              <Activity size={15} className="prediction-button-spinner" /> Calculating risk and key factors…
+            </div>
+          )}
+          {predictionError && (
+            <div className="prediction-error-message" role="alert">
+              <AlertTriangle size={15} /> <span>{predictionError}</span>
+            </div>
+          )}
 
           <div className="right-panel-content">
             {/* Clean Risk Meter Card */}
             <div className="risk-meter-card">
               <div className="risk-top-row">
                 <div>
-                  <div className="risk-number" style={{ color: isHighRisk ? '#DC2626' : (userRole === 'doctor' ? '#0F766E' : '#2563EB') }}>
-                    {riskVal}%
+                  <div className={`risk-number ${predictionLoading ? 'calculating' : ''}`} style={{ color: isHighRisk ? '#DC2626' : (userRole === 'doctor' ? '#0F766E' : '#2563EB') }}>
+                    {prediction ? `${riskVal}%` : predictionLoading ? '…' : '—'}
                   </div>
                   <div className="risk-caption">
-                    {userRole === 'doctor' ? 'Predicted DKD Risk' : 'Estimated Kidney Risk'}
+                    {predictionLoading ? 'Calculating risk' : predictionError ? 'Prediction unavailable' : userRole === 'doctor' ? 'Predicted DKD Risk' : 'Estimated Kidney Risk'}
                   </div>
                 </div>
 
-                <div className={`risk-status-pill ${isHighRisk ? 'high' : 'low'}`}>
-                  {isHighRisk ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
-                  {isHighRisk 
-                    ? (userRole === 'doctor' ? 'HIGH RISK' : 'ELEVATED RISK')
-                    : (userRole === 'doctor' ? 'LOW RISK' : 'LOW RISK')}
+                <div className={`risk-status-pill ${predictionLoading || predictionError || !prediction ? 'pending' : isHighRisk ? 'high' : 'low'}`}>
+                  {predictionLoading ? <Activity size={13} className="prediction-button-spinner" /> : predictionError ? <AlertTriangle size={13} /> : prediction ? (isHighRisk ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />) : <Activity size={13} />}
+                  {predictionLoading ? 'CALCULATING' : predictionError ? 'UNAVAILABLE' : prediction ? (isHighRisk ? (userRole === 'doctor' ? 'HIGH RISK' : 'ELEVATED RISK') : 'LOW RISK') : 'AWAITING VITALS'}
                 </div>
               </div>
 
@@ -814,7 +905,7 @@ export default function App() {
                 <div 
                   className="progress-meter-fill"
                   style={{ 
-                    width: `${Math.min(riskVal, 100)}%`,
+                    width: `${prediction ? Math.min(riskVal, 100) : 0}%`,
                     background: isHighRisk 
                       ? 'linear-gradient(90deg, #F59E0B, #DC2626)' 
                       : (userRole === 'doctor'
@@ -841,13 +932,13 @@ export default function App() {
             <div className="patient-chips-wrap">
               <div className="section-label">Current Active Patient Vitals</div>
               <div className="vitals-chips">
-                <span className="vital-chip">Age: <strong>{currentPatient.age || '--'}</strong></span>
-                <span className="vital-chip">Sex: <strong>{currentPatient.female === 1 ? 'Female' : 'Male'}</strong></span>
-                <span className="vital-chip">HbA1c: <strong>{currentPatient.hba1c ? `${currentPatient.hba1c}%` : '--'}</strong></span>
-                <span className="vital-chip">BP: <strong>{currentPatient.sbp && currentPatient.dbp ? `${currentPatient.sbp}/${currentPatient.dbp}` : '--'}</strong></span>
-                <span className="vital-chip">BMI: <strong>{currentPatient.bmi || '--'}</strong></span>
-                <span className="vital-chip">Insulin: <strong>{currentPatient.insulin_use ? 'Yes' : 'No'}</strong></span>
-                <span className="vital-chip">Duration: <strong>{currentPatient.dm_duration_years ? `${currentPatient.dm_duration_years}y` : '--'}</strong></span>
+                <span className="vital-chip">Age: <strong>{currentPatient.age != null ? currentPatient.age : '--'}</strong></span>
+                <span className="vital-chip">Sex: <strong>{currentPatient.female != null ? (currentPatient.female === 1 ? 'Female' : 'Male') : '--'}</strong></span>
+                <span className="vital-chip">HbA1c: <strong>{currentPatient.hba1c != null ? `${currentPatient.hba1c}%` : '--'}</strong></span>
+                <span className="vital-chip">BP: <strong>{currentPatient.sbp != null && currentPatient.dbp != null ? `${currentPatient.sbp}/${currentPatient.dbp}` : currentPatient.sbp != null ? `${currentPatient.sbp} mmHg` : '--'}</strong></span>
+                <span className="vital-chip">BMI: <strong>{currentPatient.bmi != null ? currentPatient.bmi : '--'}</strong></span>
+                <span className="vital-chip">Insulin: <strong>{currentPatient.insulin_use != null ? (currentPatient.insulin_use === 1 ? 'Yes' : 'No') : '--'}</strong></span>
+                <span className="vital-chip">Duration: <strong>{currentPatient.dm_duration_years != null ? `${currentPatient.dm_duration_years}y` : '--'}</strong></span>
               </div>
             </div>
 
@@ -902,7 +993,9 @@ export default function App() {
                   ))
                 ) : (
                   <div className="empty-notice">
-                    Chat with a patient profile to see live factors.
+                    {userRole === 'doctor'
+                      ? 'Essential clinical markers (Age, HbA1c, Blood Pressure) are required to calculate risk and SHAP attribution. Enter vitals or select a benchmark case above.'
+                      : 'Essential health numbers (Age, Blood Sugar HbA1c, Blood Pressure) are required to evaluate your kidney health. Enter your numbers or pick an example patient above.'}
                   </div>
                 )}
               </div>
@@ -919,6 +1012,13 @@ export default function App() {
             </div>
 
           </div>
+          {predictionAnimationKey > 0 && (
+            <div
+              key={predictionAnimationKey}
+              className={`prediction-result-scan ${isHighRisk ? 'high' : 'low'}`}
+              aria-hidden="true"
+            />
+          )}
         </aside>
 
       </div>
