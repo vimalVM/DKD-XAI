@@ -191,10 +191,12 @@ export default function App() {
       .catch(err => console.error("Could not load samples", err));
   }, []);
 
-  // Keep the risk estimate in sync with the active profile and assessment.
+  // Re-run prediction if task or userRole changes only when a prediction has already been calculated
   useEffect(() => {
-    runDirectPrediction(currentPatient, task, userRole);
-  }, [currentPatient, task, userRole, runDirectPrediction]);
+    if (prediction && currentPatient && currentPatient.age != null) {
+      runDirectPrediction(currentPatient, task, userRole);
+    }
+  }, [task, userRole]);
 
   // Smart auto-scroll: only pins to bottom if user has not scrolled up
   useEffect(() => {
@@ -350,7 +352,10 @@ export default function App() {
     const found = samples.find(s => s.id === sampleId);
     if (!found) return;
     setCurrentPatient(found.data);
-    handleSendMessage(`Analyze benchmark patient: ${found.name} (${found.description})`, found.data);
+    runDirectPrediction(found.data, task, userRole);
+    if (inputMode === 'chat') {
+      handleSendMessage(`Analyze benchmark patient: ${found.name} (${found.description})`, found.data);
+    }
   };
 
   const handleVitalChange = (field, val) => {
